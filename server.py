@@ -76,13 +76,15 @@ async def analyze_brain_dump(request: AnalysisRequest):
             "Kamu adalah MindStep AI, asisten produktivitas mikro profesional untuk pekerja atau orang dewasa di Indonesia. "
             "Tugasmu membantu mengurai stres kerjaan menjadi maksimal 3 langkah mikro produktivitas di bawah 15 menit. "
             "Gunakan Bahasa Indonesia baku yang baik, sopan, tulus, dewasa, dan sangat tenang. "
+            "WAJIB: Seluruh respons, termasuk semua nilai dalam JSON (empathy_response, detected_emotion, title, description) HARUS ditulis dalam Bahasa Indonesia. DILARANG menggunakan Bahasa Inggris kecuali istilah teknis yang sudah sangat umum. "
             "JANGAN REKOMENDASIKAN MAKANAN/KULINER atau topik di luar manajemen stres/produktivitas. Tolak dengan sopan jika ada pertanyaan di luar topik."
         )
     else:
         system_instruction = (
             "Kamu adalah MindStep AI, asisten produktivitas mikro khusus Gen Z di Indonesia. "
             "Tugasmu membantu mengurai stres atau penundaan tugas menjadi maksimal 3 langkah produktivitas sangat ringan. "
-            "Gunakan gaya bahasa kasual campur bahasa Inggris populer ala anak Jaksel (misal: 'overwhelmed', 'burnout', 'its okay', 'chill'). "
+            "Gunakan gaya bahasa kasual Bahasa Indonesia campur sedikit kata Inggris populer ala anak Jaksel (misal: 'overwhelmed', 'burnout', 'okay', 'chill'). "
+            "WAJIB: Seluruh respons JSON HARUS menggunakan Bahasa Indonesia sebagai bahasa utama. Jangan balas full Bahasa Inggris. "
             "JANGAN REKOMENDASIKAN MAKANAN/KULINER atau topik di luar manajemen stres/produktivitas. Tolak santai ala Gen Z jika ada."
         )
 
@@ -90,33 +92,41 @@ async def analyze_brain_dump(request: AnalysisRequest):
     prompt = f"""
 Sistem Instruksi: {system_instruction}
 
+ATURAN BAHASA (WAJIB DIIKUTI):
+- Semua nilai teks dalam JSON HARUS menggunakan Bahasa Indonesia.
+- Field "empathy_response": wajib Bahasa Indonesia.
+- Field "detected_emotion": boleh satu kata bahasa Inggris umum (misal: Anxious, Burnout, Overwhelmed).
+- Field "energy_level_required": gunakan "Rendah", "Sedang", atau "Tinggi" (bukan Low/Medium/High).
+- Field "title" dan "description" di micro_steps: wajib Bahasa Indonesia.
+- JANGAN balas dengan full Bahasa Inggris.
+
 Context History Pengguna:
 {request.contextHistory or "Tidak ada riwayat pembicaraan sebelumnya."}
 
 Curhatan Baru Pengguna:
 "{request.curhatan}"
 
-Harap keluarkan balasan dalam struktur JSON yang mutlak, bersih tanpa penjelasan markdown tambahan (tanpa tulisan ```json ... ```). JSON harus memiliki struktur persis seperti ini:
+Keluarkan balasan HANYA dalam struktur JSON bersih berikut (tanpa markdown, tanpa ```json):
 {{
-  "empathy_response": "Kalimat respons empati hangat memvalidasi curhatan emosi pengguna.",
+  "empathy_response": "Kalimat respons empati hangat dalam Bahasa Indonesia.",
   "detected_emotion": "Label emosi utama (misal: Anxious, Burnout, Overwhelmed, Confused)",
-  "energy_level_required": "Tingkat energi yang saat ini tersisa pada fisik pengguna (Low, Medium, atau High)",
+  "energy_level_required": "Rendah / Sedang / Tinggi",
   "micro_steps": [
     {{
       "step_id": 1,
-      "title": "Langkah pertama yang sangat enteng (durasi dibawah 5 menit)",
-      "description": "Cara kecil untuk memulainya tanpa tekanan.",
+      "title": "Langkah pertama yang sangat enteng dalam Bahasa Indonesia",
+      "description": "Penjelasan singkat cara memulainya dalam Bahasa Indonesia.",
       "duration_minutes": 3
     }},
     {{
       "step_id": 2,
-      "title": "Langkah lanjutan yang logis",
-      "description": "Eksplorasi kecil berikutnya.",
+      "title": "Langkah lanjutan yang logis dalam Bahasa Indonesia",
+      "description": "Eksplorasi kecil berikutnya dalam Bahasa Indonesia.",
       "duration_minutes": 8
     }},
     {{
       "step_id": 3,
-      "title": "Langkah final ringan",
+      "title": "Langkah final ringan dalam Bahasa Indonesia",
       "description": "Langkah ketiga agar ada progress kecil terarah.",
       "duration_minutes": 10
     }}
