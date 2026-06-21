@@ -70,16 +70,20 @@ SEMANTIC_CACHE_ENABLED = os.getenv("SEMANTIC_CACHE_ENABLED", "true").lower() == 
 SEMANTIC_CACHE_THRESHOLD = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.88"))
 
 def get_embedding(text: str) -> List[float]:
-    """Menghitung vektor embedding dari suatu teks menggunakan endpoint /api/embeddings Ollama."""
-    embed_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/embeddings"
+    """Menghitung vektor embedding dari suatu teks menggunakan endpoint /api/embed Ollama (versi terbaru)."""
+    embed_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/embed"
     payload = {
         "model": OLLAMA_MODEL,
-        "prompt": text
+        "input": text
     }
     try:
         response = requests.post(embed_url, json=payload, timeout=OLLAMA_TIMEOUT)
         response.raise_for_status()
-        return response.json().get("embedding", [])
+        # Versi terbaru mengembalikan 'embeddings' (jamak), kita ambil indeks pertama
+        result = response.json()
+        if "embeddings" in result:
+            return result["embeddings"][0]
+        return result.get("embedding", [])
     except Exception as e:
         print(f"⚠️ Gagal generate embedding dari Ollama: {e}")
         return []
@@ -204,29 +208,27 @@ async def analyze_brain_dump(request: AnalysisRequest):
         )
     else:
         system_instruction = (
-            "Kamu adalah MindStep AI, asisten produktivitas mikro khusus Gen Z di Indonesia. "
-            "Tugasmu membantu mengurai stres atau penundaan tugas menjadi maksimal 3 langkah produktivitas sangat ringan. "
-            "Gunakan gaya bahasa kasual Bahasa Indonesia campur sedikit kata Inggris populer ala anak Jaksel (misal: 'overwhelmed', 'burnout', 'okay', 'chill'). "
-            "WAJIB: Seluruh respons JSON HARUS menggunakan Bahasa Indonesia sebagai bahasa utama. Jangan balas full Bahasa Inggris. "
-            "JANGAN REKOMENDASIKAN MAKANAN/KULINER atau topik di luar manajemen stres/produktivitas. Tolak santai ala Gen Z jika ada."
+            "Kamu adalah MindStep AI, bestie produktivitas Gen Z. "
+            "WAJIB: Gunakan Bahasa Indonesia sebagai bahasa UTAMA. DILARANG menjawab full dalam Bahasa Inggris. "
+            "Gaya bahasa: Kasual Jaksel (dominan Indo + bumbu kata: jujurly, valid, healing, slay, pusing bgt, spill, anyway). "
+            "Tugasmu: urai stres jadi 3 langkah mikro (max 15 mnt) yang nyambung dan solutif. JANGAN SALIN CONTOH."
         )
 
     # 2. Rancang Prompt agar Output Ollama tervalidasi dalam Format JSON yang Konsisten
     prompt = f"""
 Sistem Instruksi: {system_instruction}
 
-ATURAN DETEKSI PERGESERAN KONTEKS (CONTEXT SHIFT):
-- Periksa apakah topik pada "Curhatan Baru Pengguna" berbeda sama sekali dengan topik di "Context History Pengguna" (misal: riwayat sebelumnya tentang skripsi, tetapi curhatan baru tentang konflik dengan teman/keluarga).
-- Jika terjadi pergeseran konteks (topik baru berubah total), kamu WAJIB mengabaikan informasi pada "Context History Pengguna". Jangan bawa masalah lama ke respons baru.
-- Fokus 100% pada curhatan baru untuk empathy_response dan micro_steps. Jangan berhalusinasi menyarankan langkah yang berhubungan dengan topik lama.
+ATURAN BAHASA & LOGIKA (WAJIB DIIKUTI):
+1. NO FULL ENGLISH: Jangan pernah membalas satu kalimat pun dalam Bahasa Inggris penuh. Gunakan Bahasa Indonesia Jaksel yang luwes.
+2. HUBUNGAN LOGIS: field "micro_steps" HARUS solusi nyata untuk masalah di "Curhatan Baru Pengguna". 
+3. PERSONA: Tetap gunakan gaya Gen Z Jaksel (Indonsia + Slang) di "empathy_response" dan "title".
+4. OUTPUT JSON: Keluarkan hanya JSON bersih.
 
-ATURAN BAHASA (WAJIB DIIKUTI):
-- Semua nilai teks dalam JSON HARUS menggunakan Bahasa Indonesia.
-- Field "empathy_response": wajib Bahasa Indonesia.
-- Field "detected_emotion": boleh satu kata bahasa Inggris umum (misal: Anxious, Burnout, Overwhelmed).
-- Field "energy_level_required": gunakan "Rendah", "Sedang", atau "Tinggi" (bukan Low/Medium/High).
-- Field "title" dan "description" di micro_steps: wajib Bahasa Indonesia.
-- JANGAN balas dengan full Bahasa Inggris.
+ISI JSON HARUS:
+- "empathy_response": Respon empati hangat dalam Bahasa Indonesia Jaksel (Bukan Inggris!).
+- "detected_emotion": Emosi (misal: "Overwhelmed parah", "Burnout", "Dead-end").
+- "energy_level_required": "Rendah", "Sedang", atau "Tinggi".
+- "micro_steps": 3 langkah konkret dalam Bahasa Indonesia.
 
 Context History Pengguna:
 {request.contextHistory or "Tidak ada riwayat pembicaraan sebelumnya."}
