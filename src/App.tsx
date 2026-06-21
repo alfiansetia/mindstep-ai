@@ -19,7 +19,6 @@ import {
   History, 
   Trash2, 
   Loader2, 
-  BookOpen, 
   ChevronRight, 
   Heart, 
   Calendar,
@@ -33,9 +32,6 @@ export default function App() {
   const [userPersona, setUserPersona] = useState<"genz" | "professional">("genz");
   const [showPersonaModal, setShowPersonaModal] = useState<boolean>(false);
 
-  const [contextHistory, setContextHistory] = useState<string>(
-    "[Kemarin pengguna mengeluh belum mulai merevisi bab 2 skripsinya karena bingung metodologi penelitian, dan merasa bersalah ke dosen pembimbing.]"
-  );
   const [curhatan, setCurhatan] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   
@@ -164,13 +160,20 @@ export default function App() {
     stopTTS();
     stopTimer();
 
+    // Buat riwayat konteks secara otomatis dari 3 sesi terakhir agar AI mengingat percakapan sebelumnya
+    const computedContextHistory = sessions
+      .slice(0, 3)
+      .map(s => `User: "${s.original_curhatan}"\nAI: "${s.empathy_response}"`)
+      .reverse()
+      .join("\n\n");
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           curhatan: textToAnalyze,
-          contextHistory: contextHistory,
+          contextHistory: computedContextHistory,
           userPersona: userPersona
         })
       });
@@ -194,7 +197,7 @@ export default function App() {
         id: "sess_" + Date.now(),
         timestamp: new Date().toISOString(),
         original_curhatan: textToAnalyze,
-        contextHistory: contextHistory,
+        contextHistory: computedContextHistory,
         empathy_response: data.empathy_response,
         detected_emotion: data.detected_emotion,
         energy_level_required: data.energy_level_required,
@@ -216,7 +219,6 @@ export default function App() {
   // Custom demo preset loader
   const loadDemoPreset = () => {
     setCurhatan(demoCurhatan);
-    setContextHistory("[Kemarin pengguna mengeluh belum mulai merevisi bab 2 skripsinya karena bingung metodologi penelitian, dan merasa bersalah ke dosen pembimbing.]");
   };
 
   // Clear current editor state
@@ -357,7 +359,6 @@ export default function App() {
   const loadPreviousSession = (session: HistorySession) => {
     setActiveSessionId(session.id);
     setCurhatan(session.original_curhatan);
-    setContextHistory(session.contextHistory || "");
     setActiveAnalysis({
       empathy_response: session.empathy_response,
       detected_emotion: session.detected_emotion,
@@ -522,25 +523,6 @@ export default function App() {
           {/* INPUT FORM: THE BRAIN ZONE */}
           <div className="bg-white border border-[#E5E0D5] rounded-[32px] p-6 flex flex-col gap-4 relative shadow-soft">
             
-            {/* Context history / RAG inputs */}
-            <div className="border border-[#E5E0D5] rounded-2xl bg-[#F9F7F2] p-3">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-mono text-[#7A7469] flex items-center gap-1">
-                  <BookOpen className="h-3.5 w-3.5 text-[#8DAA91]" />
-                  <span>Konteks Riwayat / Catatan Kemarin (RAG Context)</span>
-                </label>
-                <span className="text-[10px] font-mono text-[#8B8374] bg-[#F2EDE4] px-1.5 py-0.5 rounded">
-                  Stabilizer emosi
-                </span>
-              </div>
-              <textarea
-                value={contextHistory}
-                onChange={(e) => setContextHistory(e.target.value)}
-                placeholder="Misal: Kemarin mengeluh terhambat bimbingan skripsi karena metodologi..."
-                className="w-full text-xs bg-transparent border-0 resize-none text-[#3A3A3A] focus:outline-none placeholder-[#A09B90] font-sans leading-relaxed h-14"
-              />
-            </div>
-
             {/* Persona Selector (Adapt AI talking style & context) */}
             <div className="flex flex-col gap-1.5 border border-[#E5E0D5] rounded-2xl bg-[#F9F7F2]/50 p-3.5">
               <div className="flex justify-between items-center">

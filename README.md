@@ -52,6 +52,15 @@ OLLAMA_MODEL="llama3"
 # OLLAMA_TIMEOUT: Batas waktu tunggu response dari Ollama (dalam detik).
 # LLM lokal bisa lambat, terutama saat pertama kali load model.
 OLLAMA_TIMEOUT="180"
+
+# ── Konfigurasi Semantic Cache ───────────────────────────────────────
+# SEMANTIC_CACHE_ENABLED: Aktifkan cache semantik (true/false) untuk mempercepat respon AI yang serupa.
+# Database menggunakan SQLite bawaan Python secara otomatis (zero setup / tanpa perlu install DB).
+SEMANTIC_CACHE_ENABLED="true"
+
+# SEMANTIC_CACHE_THRESHOLD: Batas kemiripan semantik (0.0 - 1.0)
+# Nilai 0.88 berarti jika curhatan baru 88% mirip secara arti dengan curhatan lama, respons lama langsung dikembalikan.
+SEMANTIC_CACHE_THRESHOLD="0.88"
 ```
 
 ---

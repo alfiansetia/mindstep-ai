@@ -1,5 +1,8 @@
 import os
 import json
+import math
+import sqlite3
+import requests
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
@@ -10,6 +13,30 @@ from dotenv import load_dotenv
 
 # Load variabel dari file .env (jika ada)
 load_dotenv()
+
+# Inisialisasi Database SQLite untuk Semantic Cache
+DB_PATH = "cache.db"
+
+def init_db():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS semantic_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            curhatan TEXT UNIQUE,
+            embedding TEXT, -- Vektor embedding yang disimpan sebagai JSON Array
+            response TEXT,  -- Respons terstruktur (AnalysisResponse) sebagai JSON String
+            persona TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error initializing SQLite database: {e}")
+
+init_db()
 
 # Inisialisasi FastAPI
 app = FastAPI(
@@ -37,6 +64,92 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 # Timeout request ke Ollama (detik) — LLM lokal bisa lambat, default 180 detik
 # Naikkan via .env jika masih sering 503: OLLAMA_TIMEOUT=300
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
+
+# Konfigurasi Semantic Cache
+SEMANTIC_CACHE_ENABLED = os.getenv("SEMANTIC_CACHE_ENABLED", "true").lower() == "true"
+SEMANTIC_CACHE_THRESHOLD = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.88"))
+
+def get_embedding(text: str) -> List[float]:
+    """Menghitung vektor embedding dari suatu teks menggunakan endpoint /api/embeddings Ollama."""
+    embed_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/embeddings"
+    payload = {
+        "model": OLLAMA_MODEL,
+        "prompt": text
+    }
+    try:
+        response = requests.post(embed_url, json=payload, timeout=OLLAMA_TIMEOUT)
+        response.raise_for_status()
+        return response.json().get("embedding", [])
+    except Exception as e:
+        print(f"⚠️ Gagal generate embedding dari Ollama: {e}")
+        return []
+
+def cosine_similarity(v1: List[float], v2: List[float]) -> float:
+    """Menghitung nilai kedekatan/kemiripan arah dua buah vektor (Cosine Similarity)."""
+    if not v1 or not v2 or len(v1) != len(v2):
+        return 0.0
+    dot_product = sum(a * b for a, b in zip(v1, v2))
+    norm_a = math.sqrt(sum(a * a for a in v1))
+    norm_b = math.sqrt(sum(b * b for b in v2))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot_product / (norm_a * norm_b)
+
+def find_semantic_cache(new_embedding: List[float], persona: str) -> Optional[dict]:
+    """Mencari data curhatan serupa yang sudah pernah diproses sebelumnya di cache database."""
+    if not new_embedding:
+        return None
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT curhatan, embedding, response FROM semantic_cache WHERE persona = ?", (persona,))
+        rows = cursor.fetchall()
+        conn.close()
+
+        best_match = None
+        highest_similarity = -1.0
+
+        for curhatan, embedding_json, response_json in rows:
+            try:
+                cached_embedding = json.loads(embedding_json)
+                sim = cosine_similarity(new_embedding, cached_embedding)
+                if sim > highest_similarity:
+                    highest_similarity = sim
+                    best_match = {
+                        "curhatan": curhatan,
+                        "response": json.loads(response_json),
+                        "similarity": sim
+                    }
+            except Exception as e:
+                print(f"Error parsing cache row: {e}")
+                continue
+
+        if best_match and highest_similarity >= SEMANTIC_CACHE_THRESHOLD:
+            print(f"🚀 [Semantic Cache HIT] Curhatan baru mirip dengan '{best_match['curhatan']}' (Similarity: {highest_similarity:.4f} >= Threshold: {SEMANTIC_CACHE_THRESHOLD})")
+            return best_match["response"]
+
+        print(f"⚡ [Semantic Cache MISS] Kemiripan tertinggi: {highest_similarity:.4f} (Threshold: {SEMANTIC_CACHE_THRESHOLD})")
+        return None
+    except Exception as e:
+        print(f"Error reading semantic cache: {e}")
+        return None
+
+def save_semantic_cache(curhatan: str, embedding: List[float], response_data: dict, persona: str):
+    """Menyimpan curhatan beserta embedding dan responnya ke cache database."""
+    if not embedding:
+        return
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO semantic_cache (curhatan, embedding, response, persona) VALUES (?, ?, ?, ?)",
+            (curhatan, json.dumps(embedding), json.dumps(response_data), persona)
+        )
+        conn.commit()
+        conn.close()
+        print("💾 Berhasil menyimpan data ke Semantic Cache.")
+    except Exception as e:
+        print(f"Error saving to semantic cache: {e}")
 
 # Pydantic Schemas untuk menangani request dan response terstruktur
 class MicroStep(BaseModel):
@@ -71,6 +184,14 @@ async def analyze_brain_dump(request: AnalysisRequest):
     import requests # Pastikan library requests terinstall (pip install requests)
 
     persona = request.userPersona or "genz"
+    
+    # Cek apakah curhatan serupa ada di Semantic Cache
+    embedding = []
+    if SEMANTIC_CACHE_ENABLED:
+        embedding = get_embedding(request.curhatan)
+        cached_response = find_semantic_cache(embedding, persona)
+        if cached_response:
+            return cached_response
     
     # 1. Tentukan Sistem Instruksi dan Gaya bicara berdasarkan Persona pilihan
     if persona == "professional":
@@ -158,6 +279,11 @@ Keluarkan balasan HANYA dalam struktur JSON bersih berikut (tanpa markdown, tanp
 
         # Parse text string JSON dari Ollama menjadi Dictionary Python
         parsed_data = json.loads(response_text)
+        
+        # Simpan respons baru ke Semantic Cache
+        if SEMANTIC_CACHE_ENABLED and embedding:
+            save_semantic_cache(request.curhatan, embedding, parsed_data, persona)
+            
         return parsed_data
 
     except requests.exceptions.Timeout:

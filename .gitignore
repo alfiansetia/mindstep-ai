@@ -7,4 +7,6 @@ coverage/
 .env*
 !.env.example
 .env
+cache.db
+cache.db-journal
 __pycache__
