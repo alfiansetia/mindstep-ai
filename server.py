@@ -32,6 +32,10 @@ OLLAMA_API_URL = f"{OLLAMA_BASE_URL.rstrip('/')}/api/generate"
 # Nama model Ollama yang diunduh (misal: llama3, mistral, gemma2, dll.)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 
+# Timeout request ke Ollama (detik) — LLM lokal bisa lambat, default 180 detik
+# Naikkan via .env jika masih sering 503: OLLAMA_TIMEOUT=300
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
+
 # Pydantic Schemas untuk menangani request dan response terstruktur
 class MicroStep(BaseModel):
     step_id: int
@@ -129,7 +133,7 @@ Harap keluarkan balasan dalam struktur JSON yang mutlak, bersih tanpa penjelasan
             "format": "json" # Memaksa Ollama 0.1.33+ mengeluarkan format JSON yang valid
         }
         
-        response = requests.post(OLLAMA_API_URL, json=payload, timeout=45)
+        response = requests.post(OLLAMA_API_URL, json=payload, timeout=OLLAMA_TIMEOUT)
         response.raise_for_status()
         
         result_json = response.json()
@@ -139,6 +143,11 @@ Harap keluarkan balasan dalam struktur JSON yang mutlak, bersih tanpa penjelasan
         parsed_data = json.loads(response_text)
         return parsed_data
 
+    except requests.exceptions.Timeout:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Ollama timeout setelah {OLLAMA_TIMEOUT} detik. Model mungkin masih loading atau overloaded. Coba naikkan OLLAMA_TIMEOUT di .env."
+        )
     except requests.exceptions.RequestException as req_err:
         raise HTTPException(
             status_code=503, 
