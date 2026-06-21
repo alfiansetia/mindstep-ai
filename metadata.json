@@ -1,0 +1,10 @@
+{
+  "name": "MindStep AI",
+  "description": "Asisten produktivitas mikro dan pendukung kesehatan mental (wellbeing) khusus untuk Gen Z.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

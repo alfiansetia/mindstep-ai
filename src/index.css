@@ -1,0 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-serif: 'Playfair Display', Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  background-color: #F9F7F2;
+  color: #3A3A3A;
+  font-family: var(--font-sans);
+}
+
+/* Custom Natural Tone Shadows & Glows */
+.shadow-soft {
+  box-shadow: 0 4px 20px -2px rgba(141, 170, 145, 0.08);
+}
+
+.glow-sage {
+  box-shadow: 0 0 20px rgba(141, 170, 145, 0.15);
+}
+
+.glow-terracotta {
+  box-shadow: 0 0 20px rgba(217, 174, 148, 0.2);
+}
+
+/* Custom Webkit Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F2EDE4;
+}
+::-webkit-scrollbar-thumb {
+  background: #D5CFC5;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8B8374;
+}
+
+
