@@ -4,6 +4,10 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+# Load variabel dari file .env (jika ada)
+load_dotenv()
 
 # Inisialisasi FastAPI
 app = FastAPI(
@@ -20,8 +24,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Tentukan URL Ollama lokal (default: http://localhost:11434)
-OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
+# Base URL Ollama — ubah via .env agar bisa dipakai dari luar (misal remote server)
+# Contoh: OLLAMA_BASE_URL=http://192.168.1.100:11434
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_API_URL = f"{OLLAMA_BASE_URL.rstrip('/')}/api/generate"
+
 # Nama model Ollama yang diunduh (misal: llama3, mistral, gemma2, dll.)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 
@@ -150,7 +157,8 @@ Harap keluarkan balasan dalam struktur JSON yang mutlak, bersih tanpa penjelasan
 
 # Panduan singkat untuk menjalankan server Python ini di komputer lokal Anda:
 #  1. Install Python 3.9+
-#  2. Jalankan: pip install fastapi uvicorn requests pydantic
-#  3. Download Ollama dari https://ollama.com dan install ke komputer Anda
-#  4. Jalankan model pilihan Anda di terminal, contoh: ollama run llama3
-#  5. Jalankan server ini dengan perintah: uvicorn server:app --host 0.0.0.0 --port 8000
+#  2. Jalankan: pip install fastapi uvicorn requests pydantic python-dotenv
+#  3. Salin .env.example ke .env lalu isi OLLAMA_BASE_URL sesuai lokasi Ollama Anda
+#  4. Download Ollama dari https://ollama.com dan install ke komputer Anda
+#  5. Jalankan model pilihan Anda di terminal, contoh: ollama run llama3
+#  6. Jalankan server ini dengan perintah: uvicorn server:app --host 0.0.0.0 --port 8000

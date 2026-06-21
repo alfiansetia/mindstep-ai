@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
+
+// Base URL API — dikonfigurasi via .env (VITE_API_BASE_URL)
+// Kosong = relative ke server saat ini (server.ts port 3000)
+// Diisi  = langsung hit Python FastAPI, misal: http://localhost:8000
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 import { 
   Brain, 
   Sparkles, 
@@ -160,7 +165,7 @@ export default function App() {
     stopTimer();
 
     try {
-      const response = await fetch("/api/gemini/analyze", {
+      const response = await fetch(`${API_BASE_URL}/api/gemini/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

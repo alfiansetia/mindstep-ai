@@ -9,10 +9,19 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Initialize Google Gen AI
+// AI_BACKEND: 'gemini' (default) atau 'ollama' (pakai Python FastAPI lokal)
+const AI_BACKEND = (process.env.AI_BACKEND || "gemini").toLowerCase();
+const OLLAMA_BACKEND_URL = process.env.OLLAMA_BACKEND_URL || "http://localhost:8000";
+
+console.log(`🤖 AI Backend mode: ${AI_BACKEND.toUpperCase()}`);
+if (AI_BACKEND === "ollama") {
+  console.log(`   Proxying ke Python FastAPI → ${OLLAMA_BACKEND_URL}`);
+}
+
+// Initialize Google Gen AI (hanya dipakai jika AI_BACKEND=gemini)
 const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-  console.warn("Warning: GEMINI_API_KEY environment variable is not set. API calls will fail.");
+if (AI_BACKEND === "gemini" && !apiKey) {
+  console.warn("⚠️  Warning: GEMINI_API_KEY tidak diset. Set AI_BACKEND=ollama di .env untuk pakai model lokal.");
 }
 
 const ai = new GoogleGenAI({
@@ -83,6 +92,33 @@ Harap analisis curhatan tersebut dan berikan respons sebagai MindStep AI sesuai 
     schemaDescription = "Kalimat respons empati kasual ala Gen Z yang memvalidasi perasaan cemas atau overwhelmed pengguna.";
   }
 
+  // ── MODE: OLLAMA — proxy ke Python FastAPI ──────────────────────────────
+  if (AI_BACKEND === "ollama") {
+    try {
+      const fetch = (await import("node-fetch")).default;
+      const ollamaRes = await fetch(`${OLLAMA_BACKEND_URL}/api/gemini/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ curhatan, contextHistory, userPersona }),
+      });
+
+      if (!ollamaRes.ok) {
+        const errText = await ollamaRes.text();
+        throw new Error(`Python FastAPI error ${ollamaRes.status}: ${errText}`);
+      }
+
+      const data = await ollamaRes.json();
+      return res.json(data);
+    } catch (error: any) {
+      console.error("Ollama proxy error:", error);
+      return res.status(503).json({
+        error: "Gagal terhubung ke backend Ollama. Pastikan Python FastAPI (port 8000) menyala!",
+        details: error.message
+      });
+    }
+  }
+
+  // ── MODE: GEMINI ─────────────────────────────────────────────────────────
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
