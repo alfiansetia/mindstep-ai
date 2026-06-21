@@ -4,6 +4,8 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
 # Load variabel dari file .env (jika ada)
@@ -60,7 +62,7 @@ def health_check():
     return {"status": "ok", "engine": "FastAPI & Ollama Local"}
 
 
-@app.post("/api/gemini/analyze", response_model=AnalysisResponse)
+@app.post("/api/analyze", response_model=AnalysisResponse)
 async def analyze_brain_dump(request: AnalysisRequest):
     """
     Endpoint alternatif untuk memisahkan tugas besar berantakan pengguna 
@@ -91,6 +93,11 @@ async def analyze_brain_dump(request: AnalysisRequest):
     # 2. Rancang Prompt agar Output Ollama tervalidasi dalam Format JSON yang Konsisten
     prompt = f"""
 Sistem Instruksi: {system_instruction}
+
+ATURAN DETEKSI PERGESERAN KONTEKS (CONTEXT SHIFT):
+- Periksa apakah topik pada "Curhatan Baru Pengguna" berbeda sama sekali dengan topik di "Context History Pengguna" (misal: riwayat sebelumnya tentang skripsi, tetapi curhatan baru tentang konflik dengan teman/keluarga).
+- Jika terjadi pergeseran konteks (topik baru berubah total), kamu WAJIB mengabaikan informasi pada "Context History Pengguna". Jangan bawa masalah lama ke respons baru.
+- Fokus 100% pada curhatan baru untuk empathy_response dan micro_steps. Jangan berhalusinasi menyarankan langkah yang berhubungan dengan topik lama.
 
 ATURAN BAHASA (WAJIB DIIKUTI):
 - Semua nilai teks dalam JSON HARUS menggunakan Bahasa Indonesia.
@@ -174,6 +181,18 @@ Keluarkan balasan HANYA dalam struktur JSON bersih berikut (tanpa markdown, tanp
             detail=f"Terjadi kesalahan internal: {str(e)}"
         )
 
+# Serve React build (dist folder) in production
+# Jika folder 'dist' hasil build front-end ada, serve sebagai file statis
+if os.path.exists("dist"):
+    app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+    
+    @app.get("/{catchall:path}")
+    async def serve_react_app(catchall: str):
+        # Jika bukan path api, arahkan ke index.html
+        if catchall.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        return FileResponse("dist/index.html")
+
 # Panduan singkat untuk menjalankan server Python ini di komputer lokal Anda:
 #  1. Install Python 3.9+
 #  2. Jalankan: pip install fastapi uvicorn requests pydantic python-dotenv
@@ -181,3 +200,4 @@ Keluarkan balasan HANYA dalam struktur JSON bersih berikut (tanpa markdown, tanp
 #  4. Download Ollama dari https://ollama.com dan install ke komputer Anda
 #  5. Jalankan model pilihan Anda di terminal, contoh: ollama run llama3
 #  6. Jalankan server ini dengan perintah: uvicorn server:app --host 0.0.0.0 --port 8000
+

@@ -165,7 +165,7 @@ export default function App() {
     stopTimer();
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/gemini/analyze`, {
+      const response = await fetch(`${API_BASE_URL}/api/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -176,7 +176,7 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to communicate with Gemini API");
+        throw new Error("Failed to communicate with API");
       }
 
       const data: AnalysisResponse = await response.json();

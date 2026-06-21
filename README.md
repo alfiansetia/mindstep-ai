@@ -4,15 +4,14 @@
 
 # MindStep AI
 
-> Asisten produktivitas mikro berbasis LLM — ubah stres & penundaan jadi 3 langkah kecil yang bisa langsung dikerjakan.
+> Asisten produktivitas mikro berbasis LLM Lokal (Ollama) — ubah stres & penundaan jadi 3 langkah kecil yang bisa langsung dikerjakan.
 
-Proyek ini terdiri dari dua bagian yang bisa dijalankan secara bersamaan:
+Proyek ini telah dimigrasikan sepenuhnya menggunakan Python backend untuk melayani model AI lokal (Ollama) secara cepat dan offline.
 
 | Bagian | Teknologi | Port default |
 |--------|-----------|-------------|
 | **Frontend (FE)** | React + Vite + Tailwind | `http://localhost:5173` |
-| **Backend Node (BE-TS)** | Express + TypeScript (`server.ts`) | `http://localhost:3000` |
-| **Backend Python (BE-PY)** | FastAPI + Ollama (`server.py`) | `http://localhost:8000` |
+| **Backend Python (BE)** | FastAPI + Ollama (`server.py`) | `http://localhost:8000` |
 
 ---
 
@@ -20,14 +19,14 @@ Proyek ini terdiri dari dua bagian yang bisa dijalankan secara bersamaan:
 
 - **Node.js** v18+
 - **Python** 3.9+
-- **Ollama** — download di [ollama.com](https://ollama.com)
+- **Ollama** — unduh di [ollama.com](https://ollama.com)
 - Package manager: `npm` dan `pip3`
 
 ---
 
 ## 1. Konfigurasi Environment
 
-Salin file contoh lalu isi sesuai kebutuhan:
+Salin file contoh `.env.example` ke `.env`:
 
 ```bash
 cp .env.example .env
@@ -36,49 +35,35 @@ cp .env.example .env
 Buka `.env` dan sesuaikan:
 
 ```env
-# Kunci API Gemini (hanya diperlukan jika AI_BACKEND=gemini)
-GEMINI_API_KEY="isi_api_key_kamu"
-
-# ── Mode AI Backend ─────────────────────────────────────────
-# 'gemini'  → pakai Google Gemini API (butuh GEMINI_API_KEY valid)
-# 'ollama'  → pakai model lokal via Python FastAPI (tanpa API key)
-AI_BACKEND="ollama"
-
-# URL Python FastAPI (digunakan server.ts saat AI_BACKEND=ollama)
-OLLAMA_BACKEND_URL="http://localhost:8000"
-
-# ── Frontend API Target ──────────────────────────────────────
-# Kosong ("")           → FE hit server.ts (Node.js) di port 3000
-# http://localhost:8000 → FE langsung hit Python FastAPI
+# URL base API yang digunakan oleh Frontend (React).
+# Kosong ("")            = FE hit server yang sama dengan host (default)
+# http://localhost:8000  = FE langsung hit Python FastAPI (Ollama mode)
 VITE_API_BASE_URL="http://localhost:8000"
 
 # ── Konfigurasi Ollama ───────────────────────────────────────
-# Lokal: http://localhost:11434
-# Remote: http://192.168.1.100:11434
+# OLLAMA_BASE_URL: Base URL tempat server Ollama berjalan.
+# Lokal (default) : http://localhost:11434
+# Remote / luar   : http://192.168.1.100:11434  atau  https://ollama.alfilab.my.id
 OLLAMA_BASE_URL="http://localhost:11434"
+
+# OLLAMA_MODEL: Nama model Ollama yang akan digunakan.
 OLLAMA_MODEL="llama3"
+
+# OLLAMA_TIMEOUT: Batas waktu tunggu response dari Ollama (dalam detik).
+# LLM lokal bisa lambat, terutama saat pertama kali load model.
+OLLAMA_TIMEOUT="180"
 ```
 
 ---
 
-## 2. Menjalankan Backend Python / FastAPI (Ollama Mode)
+## 2. Menjalankan Backend Python (FastAPI)
 
-Backend ini menggunakan **Ollama** (LLM lokal) via FastAPI dan **tidak membutuhkan API key** apapun.
+Backend FastAPI bertugas untuk memproses curhatan dan menghubungkannya dengan model Ollama lokal.
 
 ### Install dependensi Python
 
 ```bash
 pip3 install fastapi uvicorn requests pydantic python-dotenv
-```
-
-### Pastikan Ollama menyala & model tersedia
-
-```bash
-# Pull model jika belum ada
-ollama pull llama3
-
-# (opsional) cek model yang tersedia
-ollama list
 ```
 
 ### Jalankan server FastAPI
@@ -87,8 +72,7 @@ ollama list
 python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Cek status:
-
+Cek status backend:
 ```bash
 curl http://localhost:8000/api/health
 # {"status":"ok","engine":"FastAPI & Ollama Local"}
@@ -96,89 +80,72 @@ curl http://localhost:8000/api/health
 
 ---
 
-## 3. Menjalankan Frontend (React + Vite)
-
-Frontend akan langsung hit Python FastAPI jika `VITE_API_BASE_URL=http://localhost:8000` di `.env`.
+## 3. Menjalankan Frontend (React)
 
 ```bash
 # Install dependensi (hanya perlu sekali)
 npm install
 
-# Jalankan Vite dev server (FE saja)
+# Jalankan Vite dev server
 npm run dev
 ```
 
-Frontend berjalan di → **http://localhost:5173**
-
-> **Catatan:** `VITE_API_BASE_URL` di `.env` menentukan ke mana FE mengirim request:
+Aplikasi frontend berjalan di → **http://localhost:5173**
 
 ---
 
-## 4. Menjalankan Backend Node.js (Gemini Mode — opsional)
-
-Gunakan ini **hanya jika** ingin memakai Google Gemini API atau proxy Node.js. Pastikan `AI_BACKEND` di `.env` sudah diset dengan benar.
-
-```bash
-npm run dev:node
-```
-
-> `npm run dev:node` menjalankan `tsx server.ts` di port 3000 (include Vite middleware).
-
----
-
-## 5. Menjalankan FE + BE Python Bersamaan (Rekomendasi Ollama)
+## 4. Menjalankan FE & BE Bersamaan (Rekomendasi)
 
 Buka **2 terminal terpisah**:
 
 ```bash
-# Terminal 1 — Backend Python (FastAPI + Ollama)
+# Terminal 1 — Backend Python
 python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 
-# Terminal 2 — Frontend (Vite dev server)
+# Terminal 2 — Frontend React
 npm run dev
 ```
 
-Pastikan di `.env`:
-```env
-AI_BACKEND="ollama"
-VITE_API_BASE_URL="http://localhost:8000"
-OLLAMA_BASE_URL="http://localhost:11434"
+---
+
+## Alur Request
+
+```
+React Frontend (port 5173)
+       ↓ (POST /api/analyze)
+FastAPI Backend (port 8000)
+       ↓ (POST /api/generate)
+Ollama (lokal / remote server)
 ```
 
 ---
 
-## Ringkasan Mode & Alur Request
+## Mode Production
 
-| Mode | `VITE_API_BASE_URL` | `AI_BACKEND` | Alur |
-|------|---------------------|--------------|------|
-| **Ollama (rekomendasi)** | `http://localhost:8000` | `ollama` | FE → FastAPI → Ollama |
-| **Gemini via Node** | *(kosong)* | `gemini` | FE → server.ts → Gemini API |
-| **Ollama via Node** | *(kosong)* | `ollama` | FE → server.ts → FastAPI → Ollama |
+Jika ingin dideploy atau dijalankan tanpa development server Node.js:
+
+1. Build frontend terlebih dahulu:
+   ```bash
+   npm run build
+   ```
+   Ini akan menghasilkan folder `dist/`.
+
+2. Jalankan start command:
+   ```bash
+   npm start
+   ```
+   FastAPI otomatis akan serve berkas frontend dari folder `dist/` di port `8000`. Cukup buka `http://localhost:8000` di browser.
 
 ---
 
-## Struktur Project
+## Struktur Folder Project
 
 ```
 mindstep-ai/
 ├── src/              # Kode React (Frontend)
-│   └── App.tsx       # Komponen utama, VITE_API_BASE_URL dipakai di sini
-├── server.ts         # Backend Node.js (Gemini API / proxy ke Ollama)
 ├── server.py         # Backend Python (FastAPI + Ollama)
-├── .env              # Konfigurasi lokal (tidak di-commit ke git)
+├── .env              # Konfigurasi lokal
 ├── .env.example      # Template konfigurasi
+├── package.json      # Dependensi dan script Node.js
 └── vite.config.ts    # Konfigurasi Vite
 ```
-
----
-
-## Troubleshooting
-
-| Masalah | Solusi |
-|---------|--------|
-| `API key not valid` | Pastikan `AI_BACKEND=ollama` di `.env`, atau isi `GEMINI_API_KEY` yang valid |
-| `Gagal terhubung ke Ollama` | Jalankan `ollama pull llama3` lalu cek `OLLAMA_BASE_URL` di `.env` |
-| `CORS error` di browser | Pastikan Python FastAPI menyala di port 8000 |
-| `zsh: command not found: uvicorn` | Gunakan `python3 -m uvicorn ...` (bukan langsung `uvicorn`) |
-| Port sudah terpakai | Ganti port di perintah uvicorn dan sesuaikan `VITE_API_BASE_URL` |
-| Model tidak ditemukan | Jalankan `ollama pull <nama-model>` terlebih dahulu |
