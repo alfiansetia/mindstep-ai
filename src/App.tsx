@@ -7,6 +7,8 @@ import React, { useState, useEffect, useRef } from "react";
 const metaEnv = (import.meta as any).env || {};
 const API_BASE_URL = (metaEnv.VITE_API_BASE_URL || "").replace(/\/$/, "");
 import {
+  Moon,
+  Sun,
   Brain,
   Sparkles,
   Mic,
@@ -50,6 +52,7 @@ export default function App() {
 
   const [curhatan, setCurhatan] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadingMsg, setLoadingMsg] = useState<string>("Memahami pikiranmu...");
 
   // Active response & session details
   const [activeAnalysis, setActiveAnalysis] = useState<AnalysisResponse | null>(
@@ -92,6 +95,20 @@ export default function App() {
   // Diary & Quote States
   const [showDiary, setShowDiary] = useState<boolean>(false);
   const [diaryItems, setDiaryItems] = useState<any[]>([]);
+  const [isDiaryLoading, setIsDiaryLoading] = useState<boolean>(false);
+
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem("mindstep_dark") === "true";
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    localStorage.setItem("mindstep_dark", darkMode.toString());
+  }, [darkMode]);
 
   // History & Local Registry
   const [sessions, setSessions] = useState<HistorySession[]>([]);
@@ -199,12 +216,15 @@ export default function App() {
   }, []);
 
   const fetchDiary = async () => {
+    setIsDiaryLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/history`);
       const data = await res.json();
       setDiaryItems(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("Failed to fetch diary", e);
+    } finally {
+      setIsDiaryLoading(false);
     }
   };
 
@@ -248,8 +268,22 @@ export default function App() {
   const handleAnalyze = async (textToAnalyze: string = curhatan) => {
     if (!textToAnalyze.trim()) return;
     setIsLoading(true);
+    setLoadingMsg("Mendengarkan dengan tulus...");
     stopTTS();
     stopTimer();
+
+    const loadingSteps = [
+      "Memahami emosi lo...",
+      "Menata pikiran yang berantakan...",
+      "Mencari langkah paling enteng buat lo...",
+      "Menyiapkan dukungan terbaik...",
+    ];
+
+    let msgIdx = 0;
+    const msgInterval = setInterval(() => {
+      setLoadingMsg(loadingSteps[msgIdx % loadingSteps.length]);
+      msgIdx++;
+    }, 2000);
 
     const sessionId = "sess_" + Date.now();
 
@@ -268,6 +302,7 @@ export default function App() {
         throw new Error("Failed to communicate with API");
       }
 
+      setLoadingMsg("Hampir siap...");
       const data: AnalysisResponse = await response.json();
       setActiveAnalysis(data);
 
@@ -289,6 +324,7 @@ export default function App() {
       console.error(error);
       alert("Gagal memproses curhatan kamu. Silakan coba lagi sebentar!");
     } finally {
+      clearInterval(msgInterval);
       setIsLoading(false);
       // Refresh stats automatically after analysis
       if (showDashboard) fetchStats();
@@ -457,6 +493,7 @@ export default function App() {
 
   // Web Speech API Voice Dictation toggle
   const toggleVoiceDictation = () => {
+    if ("vibrate" in navigator) navigator.vibrate(10);
     if (!recognitionRef.current) {
       alert(
         "Speech recognition tidak didukung di browser ini. Direkomendasikan menggunakan Google Chrome.",
@@ -562,47 +599,21 @@ export default function App() {
 
   const idTitleOf = (id: string) => id;
 
-  // Render Emotion Coloration Theme
   const getEmotionStyling = (emotion: string) => {
     const em = emotion.toLowerCase();
-    if (em.includes("anxious") || em.includes("cemas")) {
-      return {
-        bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
-        pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
-        glow: "shadow-soft",
-        title: "text-[#4A5D4D]",
-      };
-    }
-    if (em.includes("burnout") || em.includes("lelah")) {
-      return {
-        bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
-        pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
-        glow: "shadow-soft",
-        title: "text-[#4A5D4D]",
-      };
-    }
-    if (em.includes("overwhelmed") || em.includes("stres")) {
-      return {
-        bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
-        pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
-        glow: "shadow-soft",
-        title: "text-[#4A5D4D]",
-      };
-    }
-    if (em.includes("confused") || em.includes("bingung")) {
-      return {
-        bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
-        pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
-        glow: "shadow-soft",
-        title: "text-[#4A5D4D]",
-      };
-    }
-    return {
-      bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
-      pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
+    const common = {
+      bg: "bg-white dark:bg-[#1A1F1A] border-[#E5E0D5] dark:border-[#2D3A2F] text-[#3A3A3A] dark:text-[#E0E0E0]",
+      pill: "bg-[#F2EDE4] dark:bg-[#2D3A2F] text-[#8B8374] dark:text-[#A09B90] border border-[#E5E0D5] dark:border-[#3D4D3F]",
       glow: "shadow-soft",
-      title: "text-[#4A5D4D]",
+      title: "text-[#4A5D4D] dark:text-[#ADCB91]",
     };
+
+    if (em.includes("anxious") || em.includes("cemas")) return common;
+    if (em.includes("burnout") || em.includes("lelah")) return common;
+    if (em.includes("overwhelmed") || em.includes("stres")) return common;
+    if (em.includes("confused") || em.includes("bingung")) return common;
+
+    return common;
   };
 
   const getEnergyBadge = (lvl: string) => {
@@ -627,9 +638,9 @@ export default function App() {
     : getEmotionStyling("default");
 
   return (
-    <div className="min-h-screen bg-[#F9F7F2] text-[#3A3A3A] flex flex-col antialiased selection:bg-[#8DAA91]/20 selection:text-[#4A5D4D]">
+    <div className="min-h-screen bg-[#F9F7F2] dark:bg-[#121612] text-[#3A3A3A] dark:text-[#E0E0E0] flex flex-col antialiased selection:bg-[#8DAA91]/20 selection:text-[#4A5D4D]">
       {/* HEADER BAR */}
-      <header className="border-b border-[#E5E0D5] bg-[#F2EDE4]/80 backdrop-blur-md sticky top-0 z-40 transition-all duration-300 px-6 py-4">
+      <header className="border-b border-[#E5E0D5] dark:border-[#2D3A2F] bg-[#F2EDE4]/80 dark:bg-[#1A1F1A]/80 backdrop-blur-md sticky top-0 z-40 transition-all duration-300 px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div
@@ -638,7 +649,7 @@ export default function App() {
             >
               <Brain className="h-5 w-5 text-white" id="app-logo" />
               {/* Mini plant progress circle over logo */}
-              <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-white border border-[#E5E0D5] flex items-center justify-center overflow-hidden">
+              <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-white dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] flex items-center justify-center overflow-hidden">
                 <span className="text-[9px] font-bold text-[#8DAA91]">
                   {plant.level}
                 </span>
@@ -646,14 +657,14 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold font-display tracking-tight text-[#4A5D4D]">
+                <h1 className="text-xl font-bold font-display tracking-tight text-[#4A5D4D] dark:text-[#ADCB91]">
                   MindStep <span className="text-[#8DAA91]">AI</span>
                 </h1>
-                <div className="flex items-center gap-1 text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#F2EDE4] text-[#8DAA91] border border-[#E5E0D5]">
+                <div className="flex items-center gap-1 text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#F2EDE4] dark:bg-[#2D3A2F] text-[#8DAA91] border border-[#E5E0D5] dark:border-[#3D4D3F]">
                   <Sprout className="h-2.5 w-2.5" /> Lvl {plant.level}
                 </div>
               </div>
-              <p className="text-xs text-[#7A7469] font-sans">
+              <p className="text-xs text-[#7A7469] dark:text-[#A09B90] font-sans">
                 Asisten Produktivitas Mikro & Pelipur Stres Anak Muda
               </p>
             </div>
@@ -667,7 +678,7 @@ export default function App() {
                 fetchDiary();
                 setShowDiary(true);
               }}
-              className="flex items-center gap-2 bg-white border border-[#E5E0D5] text-[#4A5D4D] px-4 py-2 rounded-full shadow-sm hover:bg-[#F9F7F2] transition-all"
+              className="flex items-center gap-2 bg-white dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] text-[#4A5D4D] dark:text-[#E0E0E0] px-4 py-2 rounded-full shadow-sm hover:bg-[#F9F7F2] dark:hover:bg-[#3D4D3F] transition-all"
             >
               <History className="h-4 w-4 text-[#8DAA91]" />
               <span className="hidden sm:inline font-bold">Diary</span>
@@ -689,12 +700,12 @@ export default function App() {
                 setShowGarden(false);
                 toggleDashboard();
               }}
-              className="flex items-center gap-2 bg-[#4A5D4D] text-white px-4 py-2 rounded-full shadow-sm hover:bg-[#3d4d3f] transition-all"
+              className="flex items-center gap-2 bg-[#4A5D4D] dark:bg-[#ADCB91] text-white dark:text-[#1A1F1A] px-4 py-2 rounded-full shadow-sm hover:bg-[#3d4d3f] dark:hover:bg-[#9dbb81] transition-all"
             >
               <BarChart3 className="h-4 w-4" />
               <span className="hidden sm:inline font-bold">Insights</span>
             </button>
-            <div className="hidden lg:flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-[#E5E0D5] text-[#3A3A3A]">
+            <div className="hidden md:flex items-center gap-1.5 bg-white dark:bg-[#2D3A2F] px-3 py-1.5 rounded-full border border-[#E5E0D5] dark:border-[#3D4D3F] text-[#3A3A3A] dark:text-[#E0E0E0]">
               <Calendar className="h-3.5 w-3.5 text-[#8DAA91]" />
               <span>
                 {new Date().toLocaleDateString("id-ID", {
@@ -705,11 +716,33 @@ export default function App() {
                 })}
               </span>
             </div>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="h-10 w-10 rounded-full bg-white dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] flex items-center justify-center text-[#4A5D4D] dark:text-[#ADCB91] hover:bg-[#F2EDE4] dark:hover:bg-[#3D4D3F] transition-all"
+            >
+              {darkMode ? (
+                <Sun className="h-5 w-5" />
+              ) : (
+                <Moon className="h-5 w-5" />
+              )}
+            </button>
           </div>
 
           {/* User Level Mobile Only Badge */}
-          <div className="flex md:hidden items-center gap-1 text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-[#8DAA91] text-white">
-            Lvl {plant.level}
+          <div className="flex md:hidden items-center gap-3">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="h-8 w-8 rounded-full bg-white dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] flex items-center justify-center text-[#4A5D4D] dark:text-[#ADCB91]"
+            >
+              {darkMode ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </button>
+            <div className="flex items-center gap-1 text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-[#8DAA91] text-white">
+              Lvl {plant.level}
+            </div>
           </div>
         </div>
       </header>
@@ -719,19 +752,19 @@ export default function App() {
         {/* LEFT COLUMN: EDITOR & INPUT COGNITIVE BRAIN-DUMP (cols 5) */}
         <div className="lg:col-span-5 flex flex-col gap-6">
           {/* WELLBEING WELL-PREPARED INTRO / TIP */}
-          <div className="bg-[#F2EDE4] border border-[#E5E0D5] p-5 rounded-[24px] relative overflow-hidden shadow-soft">
+          <div className="bg-[#F2EDE4] dark:bg-[#1A1F1A] border border-[#E5E0D5] dark:border-[#2D3A2F] p-5 rounded-[24px] relative overflow-hidden shadow-soft">
             <div className="absolute top-0 right-0 p-3 opacity-15 transform translate-x-2 -translate-y-2">
               <Sparkles className="h-12 w-12 text-[#8DAA91]" />
             </div>
             <div className="flex gap-3">
-              <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center text-[#8DAA91] flex-shrink-0">
+              <div className="h-8 w-8 rounded-full bg-white dark:bg-[#2D3A2F] flex items-center justify-center text-[#8DAA91] flex-shrink-0">
                 <Sparkle className="h-4 w-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-[#4A5D4D] font-display uppercase tracking-wider">
+                <h3 className="text-sm font-bold text-[#4A5D4D] dark:text-[#ADCB91] font-display uppercase tracking-wider">
                   Anti Analysis Paralysis 🍃
                 </h3>
-                <p className="text-xs text-[#7A7469] mt-1.5 leading-relaxed">
+                <p className="text-xs text-[#7A7469] dark:text-[#A09B90] mt-1.5 leading-relaxed">
                   Lagi hectic, overwhelmed, atau dead-end? Tulis atau ucapkan
                   semua pikiran berantakan kamu di bawah. Kita dekap emosinya
                   dan racik 3 langkah super enteng biar kamu bisa start tanpa
@@ -742,15 +775,15 @@ export default function App() {
           </div>
 
           {/* INPUT FORM: THE BRAIN ZONE */}
-          <div className="bg-white border border-[#E5E0D5] rounded-[32px] p-6 flex flex-col gap-4 relative shadow-soft">
+          <div className="bg-white dark:bg-[#1A1F1A] border border-[#E5E0D5] dark:border-[#2D3A2F] rounded-[32px] p-6 flex flex-col gap-4 relative shadow-soft">
             {/* Persona Selector (Adapt AI talking style & context) */}
-            <div className="flex flex-col gap-1.5 border border-[#E5E0D5] rounded-2xl bg-[#F9F7F2]/50 p-3.5">
+            <div className="flex flex-col gap-1.5 border border-[#E5E0D5] dark:border-[#2D3A2F] rounded-2xl bg-[#F9F7F2]/50 dark:bg-[#2D3A2F]/50 p-3.5">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-[#4A5D4D] font-display uppercase tracking-wider flex items-center gap-1.5">
+                <span className="text-xs font-bold text-[#4A5D4D] dark:text-[#ADCB91] font-display uppercase tracking-wider flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-[#8DAA91]" />
                   Gaya Bicara & Respon AI :
                 </span>
-                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full font-bold bg-[#F2EDE4] text-[#8DAA91]">
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full font-bold bg-[#F2EDE4] dark:bg-[#1A1F1A] text-[#8DAA91]">
                   {userPersona === "genz" ? "Gen Z Mode" : "Profesional"}
                 </span>
               </div>
@@ -764,7 +797,7 @@ export default function App() {
                   className={`py-2 px-3 rounded-xl text-xs font-semibold flex flex-col items-center justify-center gap-0.5 transition-all text-center border ${
                     userPersona === "genz"
                       ? "bg-[#8DAA91] text-white border-[#8DAA91] shadow-sm"
-                      : "bg-white text-[#7A7469] border-[#E5E0D5] hover:bg-[#F2EDE4]/30"
+                      : "bg-white dark:bg-[#2D3A2F] text-[#7A7469] dark:text-[#A09B90] border-[#E5E0D5] dark:border-[#3D4D3F] hover:bg-[#F2EDE4]/30"
                   }`}
                 >
                   <span className="font-bold">Generasi Z</span>
@@ -781,7 +814,7 @@ export default function App() {
                   className={`py-2 px-3 rounded-xl text-xs font-semibold flex flex-col items-center justify-center gap-0.5 transition-all text-center border ${
                     userPersona === "professional"
                       ? "bg-[#4A5D4D] text-white border-[#4A5D4D] shadow-sm"
-                      : "bg-white text-[#7A7469] border-[#E5E0D5] hover:bg-[#F2EDE4]/30"
+                      : "bg-white dark:bg-[#2D3A2F] text-[#7A7469] dark:text-[#A09B90] border-[#E5E0D5] dark:border-[#3D4D3F] hover:bg-[#F2EDE4]/30"
                   }`}
                 >
                   <span className="font-bold font-sans">Profesional</span>
@@ -795,7 +828,7 @@ export default function App() {
             {/* Curhatan Section */}
             <div className="flex flex-col gap-2 mt-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-[#4A5D4D] font-display uppercase tracking-wider flex items-center gap-1.5">
+                <span className="text-sm font-bold text-[#4A5D4D] dark:text-[#ADCB91] font-display uppercase tracking-wider flex items-center gap-1.5">
                   <Layers className="h-4 w-4 text-[#8DAA91]" />
                   Active Brain-Dump
                 </span>
@@ -804,14 +837,14 @@ export default function App() {
                 <div className="flex gap-2">
                   <button
                     onClick={loadDemoPreset}
-                    className="text-[10px] font-mono text-[#8DAA91] hover:text-[#4A5D4D] transition-colors bg-[#F2EDE4] border border-[#E5E0D5] px-2.5 py-1 rounded-full font-bold"
+                    className="text-[10px] font-mono text-[#8DAA91] hover:text-[#4A5D4D] transition-colors bg-[#F2EDE4] dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] px-2.5 py-1 rounded-full font-bold"
                   >
                     🚀 Demo
                   </button>
                   {curhatan && (
                     <button
                       onClick={clearEditor}
-                      className="text-[10px] text-[#8B8374] hover:text-[#3A3A3A] transition-colors flex items-center gap-0.5"
+                      className="text-[10px] text-[#8B8374] dark:text-[#A09B90] hover:text-[#3A3A3A] dark:hover:text-[#E0E0E0] transition-colors flex items-center gap-0.5"
                     >
                       Reset
                     </button>
@@ -821,9 +854,9 @@ export default function App() {
 
               {/* Speech-to-Text Recognition Banner if listening */}
               {isListening && (
-                <div className="bg-[#F2EDE4] border border-[#E5E0D5] p-2.5 rounded-xl flex items-center gap-3 animate-pulse">
+                <div className="bg-[#F2EDE4] dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] p-2.5 rounded-xl flex items-center gap-3 animate-pulse">
                   <span className="h-2 w-2 rounded-full bg-[#8DAA91] animate-ping"></span>
-                  <p className="text-xs text-[#7A7469] font-mono flex-grow truncate">
+                  <p className="text-xs text-[#7A7469] dark:text-[#A09B90] font-mono flex-grow truncate">
                     {speechFeedback}
                   </p>
                 </div>
@@ -835,7 +868,7 @@ export default function App() {
                   onChange={(e) => setCurhatan(e.target.value)}
                   maxLength={3000}
                   placeholder="Ketik curhatan atau hal yang bikin kamu stress berat di sini..."
-                  className="w-full min-h-[160px] bg-[#F9F7F2]/50 border border-[#E5E0D5] rounded-2xl p-4 text-sm text-[#3A3A3A] placeholder-[#A09B90] focus:outline-none focus:ring-1 focus:ring-[#8DAA91]/50 focus:border-[#8DAA91]/50 resize-y leading-relaxed"
+                  className="w-full min-h-[160px] bg-[#F9F7F2]/50 dark:bg-[#121612] border border-[#E5E0D5] dark:border-[#2D3A2F] rounded-2xl p-4 text-sm text-[#3A3A3A] dark:text-[#E0E0E0] placeholder-[#A09B90] dark:placeholder-[#4D5A4D] focus:outline-none focus:ring-1 focus:ring-[#8DAA91]/50 focus:border-[#8DAA91]/50 resize-y leading-relaxed"
                 />
 
                 {/* Character Counter */}
@@ -844,7 +877,7 @@ export default function App() {
                     className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md ${
                       curhatan.length >= 2800
                         ? "bg-red-50 text-red-400"
-                        : "bg-[#F2EDE4] text-[#8B8374]"
+                        : "bg-[#F2EDE4] dark:bg-[#2D3A2F] text-[#8B8374] dark:text-[#A09B90]"
                     }`}
                   >
                     {curhatan.length}/3000
@@ -859,7 +892,7 @@ export default function App() {
                     className={`h-9 w-9 rounded-full flex items-center justify-center transition-all ${
                       isListening
                         ? "bg-red-400 text-white animate-pulse shadow-md ring-4 ring-red-400/10"
-                        : "bg-[#F2EDE4] text-[#4A5D4D] hover:bg-[#E5E0D5]"
+                        : "bg-[#F2EDE4] dark:bg-[#2D3A2F] text-[#4A5D4D] dark:text-[#ADCB91] hover:bg-[#E5E0D5] dark:hover:bg-[#3D4D3F]"
                     }`}
                   >
                     {isListening ? (
@@ -878,14 +911,14 @@ export default function App() {
               disabled={isLoading || !curhatan.trim()}
               className={`w-full py-3.5 px-4 rounded-2xl font-display font-bold text-sm flex items-center justify-center gap-2 transition-all ${
                 !curhatan.trim()
-                  ? "bg-[#F2EDE4] text-[#8B8374] cursor-not-allowed border border-[#E5E0D5]"
+                  ? "bg-[#F2EDE4] dark:bg-[#2D3A2F] text-[#8B8374] dark:text-[#A09B90] cursor-not-allowed border border-[#E5E0D5] dark:border-[#3D4D3F]"
                   : "bg-[#8DAA91] text-white hover:bg-[#7ba081] hover:shadow-lg hover:shadow-[#8DAA91]/15"
               }`}
             >
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Processing...</span>
+                  <span>{loadingMsg}</span>
                 </>
               ) : (
                 <>
@@ -914,37 +947,37 @@ export default function App() {
           )}
 
           {/* WELLBEING METRICS DIARY (cols 5 bottom) */}
-          <div className="bg-white border border-[#E5E0D5] rounded-[32px] p-6 flex flex-col gap-4 shadow-soft">
+          <div className="bg-white dark:bg-[#1A1F1A] border border-[#E5E0D5] dark:border-[#2D3A2F] rounded-[32px] p-6 flex flex-col gap-4 shadow-soft">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-[#4A5D4D] font-display uppercase tracking-wider flex items-center gap-2">
+              <h2 className="text-sm font-bold text-[#4A5D4D] dark:text-[#ADCB91] font-display uppercase tracking-wider flex items-center gap-2">
                 <History className="h-4 w-4 text-[#8DAA91]" />
                 Catatan Harian Emosi
               </h2>
-              <span className="text-[10px] font-mono text-[#8B8374] bg-[#F2EDE4] px-2.5 py-0.5 rounded-full border border-[#E5E0D5]">
+              <span className="text-[10px] font-mono text-[#8B8374] dark:text-[#A09B90] bg-[#F2EDE4] dark:bg-[#2D3A2F] px-2.5 py-0.5 rounded-full border border-[#E5E0D5] dark:border-[#3D4D3F]">
                 Mental Fitness Log
               </span>
             </div>
 
             {/* Quick stats grid */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-[#F9F7F2] border border-[#E5E0D5] p-3 rounded-2xl text-center">
-                <span className="text-xs text-[#7A7469] block font-sans">
+              <div className="bg-[#F9F7F2] dark:bg-[#121612] border border-[#E5E0D5] dark:border-[#2D3A2F] p-3 rounded-2xl text-center">
+                <span className="text-xs text-[#7A7469] dark:text-[#A09B90] block font-sans">
                   Curhat
                 </span>
-                <span className="text-lg font-bold font-display text-[#4A5D4D] mt-1 block">
+                <span className="text-lg font-bold font-display text-[#4A5D4D] dark:text-[#ADCB91] mt-1 block">
                   {sessions.length}
                 </span>
               </div>
-              <div className="bg-[#F9F7F2] border border-[#E5E0D5] p-3 rounded-2xl text-center">
-                <span className="text-xs text-[#7A7469] block font-sans">
+              <div className="bg-[#F9F7F2] dark:bg-[#121612] border border-[#E5E0D5] dark:border-[#2D3A2F] p-3 rounded-2xl text-center">
+                <span className="text-xs text-[#7A7469] dark:text-[#A09B90] block font-sans">
                   Mikro Aksi
                 </span>
                 <span className="text-lg font-bold font-display text-[#8DAA91] mt-1 block">
                   {completedTaskCount}/{totalTasksSaved}
                 </span>
               </div>
-              <div className="bg-[#F9F7F2] border border-[#E5E0D5] p-3 rounded-2xl text-center">
-                <span className="text-xs text-[#7A7469] block font-sans">
+              <div className="bg-[#F9F7F2] dark:bg-[#121612] border border-[#E5E0D5] dark:border-[#2D3A2F] p-3 rounded-2xl text-center">
+                <span className="text-xs text-[#7A7469] dark:text-[#A09B90] block font-sans">
                   Streak Day
                 </span>
                 <span className="text-lg font-bold font-display text-[#D9AE94] mt-1 block flex items-center justify-center gap-0.5">
@@ -960,11 +993,11 @@ export default function App() {
             {/* Saved Sessions Log */}
             <div className="flex flex-col gap-2 max-h-[190px] overflow-y-auto pr-1">
               {sessions.length === 0 ? (
-                <div className="text-center py-6 border border-dashed border-[#E5E0D5] rounded-xl">
-                  <p className="text-xs text-[#7A7469]">
+                <div className="text-center py-6 border border-dashed border-[#E5E0D5] dark:border-[#2D3A2F] rounded-xl">
+                  <p className="text-xs text-[#7A7469] dark:text-[#A09B90]">
                     Belum ada riwayat curhatan kamu.
                   </p>
-                  <p className="text-[11px] text-[#8B8374] mt-0.5">
+                  <p className="text-[11px] text-[#8B8374] dark:text-[#A09B90] mt-0.5">
                     Gunakan curhatan demo di atas untuk memulai!
                   </p>
                 </div>
@@ -977,8 +1010,8 @@ export default function App() {
                       onClick={() => loadPreviousSession(sess)}
                       className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
                         activeSessionId === sess.id
-                          ? "bg-[#F2EDE4]/80 border-[#8DAA91] "
-                          : "bg-[#F9F7F2]/40 border-[#E5E0D5] hover:border-[#8DAA91]/50 hover:bg-[#F2EDE4]/30"
+                          ? "bg-[#F2EDE4]/80 dark:bg-[#2D3A2F] border-[#8DAA91] "
+                          : "bg-[#F9F7F2]/40 dark:bg-[#121612] border-[#E5E0D5] dark:border-[#2D3A2F] hover:border-[#8DAA91]/50 hover:bg-[#F2EDE4]/30 dark:hover:bg-[#2D3A2F]"
                       }`}
                     >
                       <div className="flex-grow truncate pr-3">
@@ -988,21 +1021,21 @@ export default function App() {
                           >
                             {sess.detected_emotion}
                           </span>
-                          <span className="text-[#8B8374] font-mono text-[9px]">
+                          <span className="text-[#8B8374] dark:text-[#A09B90] font-mono text-[9px]">
                             {new Date(sess.timestamp).toLocaleTimeString(
                               "id-ID",
                               { hour: "numeric", minute: "2-digit" },
                             )}
                           </span>
                         </div>
-                        <p className="text-xs text-[#3A3A3A] leading-relaxed truncate">
+                        <p className="text-xs text-[#3A3A3A] dark:text-[#E0E0E0] leading-relaxed truncate">
                           {sess.original_curhatan}
                         </p>
                       </div>
 
                       <button
                         onClick={(e) => deleteSession(e, sess.id)}
-                        className="h-7 w-7 rounded-md hover:bg-[#E5E0D5]/60 text-[#8B8374] hover:text-[#4A5D4D] flex items-center justify-center transition-colors"
+                        className="h-7 w-7 rounded-md hover:bg-[#E5E0D5]/60 dark:hover:bg-[#3D4D3F] text-[#8B8374] dark:text-[#A09B90] hover:text-[#4A5D4D] dark:hover:text-[#ADCB91] flex items-center justify-center transition-colors"
                         title="Hapus riwayat ini"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -1073,15 +1106,15 @@ export default function App() {
 
           {/* ACTIVE RESPONSE VISUAL AREA */}
           {!activeAnalysis ? (
-            <div className="bg-white border border-dashed border-[#E5E0D5] rounded-[40px] p-16 flex flex-col items-center justify-center text-center gap-4 flex-grow shadow-soft">
-              <div className="h-16 w-16 rounded-full bg-[#F2EDE4] flex items-center justify-center border border-[#E5E0D5] text-[#8DAA91]">
+            <div className="bg-white dark:bg-[#1A1F1A] border border-dashed border-[#E5E0D5] dark:border-[#2D3A2F] rounded-[40px] p-16 flex flex-col items-center justify-center text-center gap-4 flex-grow shadow-soft">
+              <div className="h-16 w-16 rounded-full bg-[#F2EDE4] dark:bg-[#2D3A2F] flex items-center justify-center border border-[#E5E0D5] dark:border-[#3D4D3F] text-[#8DAA91]">
                 <Brain className="h-8 w-8" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-[#4A5D4D] font-display uppercase tracking-wider">
+                <h3 className="text-base font-bold text-[#4A5D4D] dark:text-[#ADCB91] font-display uppercase tracking-wider">
                   Belum Ada Analisis
                 </h3>
-                <p className="text-xs text-[#7A7469] mt-1.5 max-w-sm mx-auto leading-relaxed">
+                <p className="text-xs text-[#7A7469] dark:text-[#A09B90] mt-1.5 max-w-sm mx-auto leading-relaxed">
                   MindStep AI siap dengerin keluh kesah kamu. Pakai "Curhatan
                   Demo" atau ketik langsung stres kamu di editor kiri, lalu klik
                   analisis.
@@ -1098,14 +1131,14 @@ export default function App() {
           ) : (
             <div className="flex flex-col gap-6 flex-grow font-sans">
               {/* EMPATHY INSIGHTS CARD */}
-              <div className="bg-white rounded-[40px] p-8 md:p-10 shadow-soft border border-[#E5E0D5] flex flex-col gap-6 relative overflow-hidden">
+              <div className="bg-white dark:bg-[#1A1F1A] rounded-[40px] p-8 md:p-10 shadow-soft border border-[#E5E0D5] dark:border-[#2D3A2F] flex flex-col gap-6 relative overflow-hidden">
                 {/* Decorative natural flora motif background effect */}
                 <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                   <Brain className="h-32 w-32 text-[#8DAA91]" />
                 </div>
 
                 <div className="flex flex-wrap gap-3 items-center">
-                  <span className="px-3.5 py-1 bg-[#F2EDE4] rounded-full text-xs font-bold uppercase tracking-widest text-[#8B8374] border border-[#E5E0D5]/40">
+                  <span className="px-3.5 py-1 bg-[#F2EDE4] dark:bg-[#2D3A2F] rounded-full text-xs font-bold uppercase tracking-widest text-[#8B8374] dark:text-[#A09B90] border border-[#E5E0D5] dark:border-[#3D4D3F]">
                     Detected: {activeAnalysis.detected_emotion}
                   </span>
                   <span
@@ -1113,7 +1146,7 @@ export default function App() {
                       activeAnalysis.energy_level_required
                         .toLowerCase()
                         .includes("low")
-                        ? "bg-[#8DAA91]/10 text-[#4A5D4D] border-[#8DAA91]/30"
+                        ? "bg-[#8DAA91]/10 text-[#4A5D4D] dark:text-[#ADCB91] border-[#8DAA91]/30"
                         : "bg-[#D9AE94]/10 text-[#D9AE94] border-[#D9AE94]/30"
                     }`}
                   >
@@ -1124,7 +1157,7 @@ export default function App() {
                 {/* EMPATHY RESPONSE SECTION WITH TTS */}
                 <div className="mt-2 flex items-start justify-between gap-6">
                   <div className="flex-grow">
-                    <h1 className="text-3xl md:text-[38px] leading-[1.15] font-serif italic text-[#4A5D4D] tracking-tight">
+                    <h1 className="text-3xl md:text-[38px] leading-[1.15] font-serif italic text-[#4A5D4D] dark:text-[#ADCB91] tracking-tight">
                       {activeAnalysis.empathy_response}
                     </h1>
                   </div>
@@ -1134,7 +1167,7 @@ export default function App() {
                     className={`h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all shadow-sm ${
                       isSpeaking
                         ? "bg-[#8DAA91] text-white animate-pulse"
-                        : "bg-[#F2EDE4] text-[#4A5D4D] hover:bg-[#E5E0D5] hover:text-[#3A3A3A]"
+                        : "bg-[#F2EDE4] dark:bg-[#2D3A2F] text-[#4A5D4D] dark:text-[#ADCB91] hover:bg-[#E5E0D5] dark:hover:bg-[#3D4D3F] hover:text-[#3A3A3A] dark:hover:text-[#E0E0E0]"
                     }`}
                     title={
                       isSpeaking
@@ -1146,12 +1179,12 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="h-[1px] w-full bg-[#E5E0D5] my-2"></div>
+                <div className="h-[1px] w-full bg-[#E5E0D5] dark:bg-[#2D3A2F] my-2"></div>
 
-                <div className="flex items-center gap-4 text-xs text-[#7A7469]">
+                <div className="flex items-center gap-4 text-xs text-[#7A7469] dark:text-[#A09B90]">
                   <div className="flex -space-x-1">
-                    <div className="w-6 h-6 rounded-full border border-white bg-[#D9AE94]"></div>
-                    <div className="w-6 h-6 rounded-full border border-white bg-[#8DAA91]"></div>
+                    <div className="w-6 h-6 rounded-full border border-white dark:border-[#1A1F1A] bg-[#D9AE94]"></div>
+                    <div className="w-6 h-6 rounded-full border border-white dark:border-[#1A1F1A] bg-[#8DAA91]"></div>
                   </div>
                   <p className="italic">
                     Ratusan Generasi Z menceritakan kecemasan setara siang ini.
@@ -1161,18 +1194,18 @@ export default function App() {
               </div>
 
               {/* THREE MICRO ACTIONS ROADMAP */}
-              <div className="bg-white border border-[#E5E0D5] rounded-[32px] p-6 flex flex-col gap-4 shadow-soft">
-                <div className="flex items-center justify-between border-b border-[#E5E0D5] pb-3">
+              <div className="bg-white dark:bg-[#1A1F1A] border border-[#E5E0D5] dark:border-[#2D3A2F] rounded-[32px] p-6 flex flex-col gap-4 shadow-soft">
+                <div className="flex items-center justify-between border-b border-[#E5E0D5] dark:border-[#2D3A2F] pb-3">
                   <div>
-                    <h3 className="text-sm font-bold text-[#4A5D4D] font-display uppercase tracking-wider">
+                    <h3 className="text-sm font-bold text-[#4A5D4D] dark:text-[#ADCB91] font-display uppercase tracking-wider">
                       Productivity Micro-Steps
                     </h3>
-                    <p className="text-xs text-[#7A7469] mt-0.5">
+                    <p className="text-xs text-[#7A7469] dark:text-[#A09B90] mt-0.5">
                       Selesaikan aksi super enteng ini biar nggak burnout demi
                       progress-mu.
                     </p>
                   </div>
-                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#8DAA91] bg-[#F2EDE4] px-2.5 py-1 rounded-full border border-[#E5E0D5]">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#8DAA91] bg-[#F2EDE4] dark:bg-[#2D3A2F] px-2.5 py-1 rounded-full border border-[#E5E0D5] dark:border-[#3D4D3F]">
                     Sangat Ringan
                   </span>
                 </div>
@@ -1187,10 +1220,10 @@ export default function App() {
                         key={step.step_id}
                         className={`transition-all rounded-3xl p-5 border ${
                           isStepDone
-                            ? "bg-[#F9F7F2]/60 border-[#E5E0D5] opacity-65"
+                            ? "bg-[#F9F7F2]/60 dark:bg-[#121612] border-[#E5E0D5] dark:border-[#2D3A2F] opacity-65"
                             : isFirstStepAndNotDone
-                              ? "bg-[#F2EDE4] border-l-8 border-[#8DAA91] border-t border-r border-b border-[#E5E0D5] shadow-sm"
-                              : "bg-white border-[#E5E0D5]"
+                              ? "bg-[#F2EDE4] dark:bg-[#2D3A2F] border-l-8 border-[#8DAA91] border-t border-r border-b border-[#E5E0D5] dark:border-[#3D4D3F] shadow-sm"
+                              : "bg-white dark:bg-[#1A1F1A] border-[#E5E0D5] dark:border-[#2D3A2F]"
                         }`}
                       >
                         <div className="flex items-start gap-4">
@@ -1202,8 +1235,8 @@ export default function App() {
                               isStepDone
                                 ? "bg-[#8DAA91] text-white"
                                 : isFirstStepAndNotDone
-                                  ? "bg-white text-[#8DAA91] border border-[#8DAA91] shadow-sm hover:bg-[#8DAA91]/10"
-                                  : "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5] hover:bg-[#E5E0D5]"
+                                  ? "bg-white dark:bg-[#121612] text-[#8DAA91] border border-[#8DAA91] shadow-sm hover:bg-[#8DAA91]/10"
+                                  : "bg-[#F2EDE4] dark:bg-[#2D3A2F] text-[#8B8374] dark:text-[#A09B90] border border-[#E5E0D5] dark:border-[#3D4D3F] hover:bg-[#E5E0D5] dark:hover:bg-[#3D4D3F]"
                             }`}
                           >
                             {isStepDone ? (
@@ -1218,15 +1251,15 @@ export default function App() {
                               <h4
                                 className={`font-bold transition-all ${
                                   isStepDone
-                                    ? "text-[#7A7469] line-through font-medium"
-                                    : "text-[#4A5D4D]"
+                                    ? "text-[#7A7469] dark:text-[#A09B90] line-through font-medium"
+                                    : "text-[#4A5D4D] dark:text-[#E0E0E0]"
                                 }`}
                               >
                                 {step.title}
                               </h4>
 
                               <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-mono text-[#7A7469] flex items-center gap-1 bg-[#F2EDE4] px-2 py-0.5 rounded-full border border-[#E5E0D5]/50">
+                                <span className="text-[11px] font-mono text-[#7A7469] dark:text-[#A09B90] flex items-center gap-1 bg-[#F2EDE4] dark:bg-[#2D3A2F] px-2 py-0.5 rounded-full border border-[#E5E0D5]/50 dark:border-[#3D4D3F]">
                                   <Clock className="h-3 w-3 text-[#8DAA91]" />
                                   {step.duration_minutes} Menit
                                 </span>
@@ -1239,7 +1272,7 @@ export default function App() {
                                         step.duration_minutes,
                                       )
                                     }
-                                    className="text-[10px] font-mono text-[#D9AE94] hover:text-[#cb9d81] bg-[#F2EDE4] px-2.5 py-0.5 rounded-full border border-[#E5E0D5] flex items-center gap-0.5 transition-all font-bold"
+                                    className="text-[10px] font-mono text-[#D9AE94] hover:text-[#cb9d81] bg-[#F2EDE4] dark:bg-[#2D3A2F] px-2.5 py-0.5 rounded-full border border-[#E5E0D5] dark:border-[#3D4D3F] flex items-center gap-0.5 transition-all font-bold"
                                     title="Mulai Sesi Fokus Mikro sekarang"
                                   >
                                     Focus
@@ -1248,7 +1281,7 @@ export default function App() {
                               </div>
                             </div>
 
-                            <p className="text-sm text-[#7A7469] mt-2 leading-relaxed">
+                            <p className="text-sm text-[#7A7469] dark:text-[#A09B90] mt-2 leading-relaxed">
                               {step.description}
                             </p>
                           </div>
@@ -1258,7 +1291,7 @@ export default function App() {
                   })}
                 </div>
 
-                <div className="text-[11px] font-sans text-[#8B8374] flex items-center gap-1.5 justify-center mt-2 font-medium">
+                <div className="text-[11px] font-sans text-[#8B8374] dark:text-[#A09B90] flex items-center gap-1.5 justify-center mt-2 font-medium">
                   <span>
                     ✨ Tips: Mulai dari Langkah Pertama. Gak usah mikirin
                     bab-bab selanjutnya dulu ya.
@@ -1301,7 +1334,7 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-[#E5E0D5] bg-[#F2EDE4]/30 py-6 text-center text-xs text-[#8B8374] mt-8">
+      <footer className="border-t border-[#E5E0D5] dark:border-[#2D3A2F] bg-[#F2EDE4]/30 dark:bg-[#1A1F1A]/30 py-6 text-center text-xs text-[#8B8374] dark:text-[#A09B90] mt-8">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-semibold uppercase tracking-wider text-[10px]">
           <p>© 2026 MindStep AI • Micro-Productivity for Wellbeing</p>
           <div className="flex gap-4">
@@ -1312,33 +1345,110 @@ export default function App() {
         </div>
       </footer>
 
+      {/* ZEN FOCUS MODE OVERLAY */}
+      {timerActive && (
+        <div className="fixed inset-0 z-[100] bg-[#4A5D4D] text-white flex flex-col items-center justify-center p-8 text-center animate-fadeIn">
+          <div className="absolute top-10 right-10 flex gap-4">
+            <button
+              onClick={() => setTimerActive(false)}
+              className="h-12 w-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center border border-white/20 transition-all"
+            >
+              <Pause className="h-6 w-6" />
+            </button>
+            <button
+              onClick={stopTimer}
+              className="px-6 py-2 rounded-full bg-red-400 hover:bg-red-500 text-white font-bold transition-all shadow-lg"
+            >
+              Keluar Zen Mode
+            </button>
+          </div>
+
+          <div className="max-w-2xl w-full flex flex-col items-center gap-10">
+            <div className="flex flex-col items-center gap-2">
+              <span className="text-xs font-mono uppercase tracking-[0.3em] opacity-60">
+                Deep Focus Active
+              </span>
+              <h2 className="text-2xl font-serif italic opacity-90">
+                "
+                {
+                  activeAnalysis?.micro_steps.find(
+                    (s) => s.step_id === timerStepId,
+                  )?.title
+                }
+                "
+              </h2>
+            </div>
+
+            <div className="relative flex items-center justify-center">
+              <div
+                className="absolute inset-0 bg-white/5 rounded-full animate-pulse scale-150 blur-3xl"
+                style={{ animationDuration: "4s" }}
+              ></div>
+              <div className="text-[120px] md:text-[160px] font-mono font-bold tracking-tighter leading-none z-10 drop-shadow-2xl">
+                {formatTime(timerSeconds)}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-lg opacity-80 leading-relaxed max-w-lg">
+                {
+                  activeAnalysis?.micro_steps.find(
+                    (s) => s.step_id === timerStepId,
+                  )?.description
+                }
+              </p>
+              <div className="flex items-center justify-center gap-6 pt-4">
+                <button
+                  onClick={resetTimer}
+                  className="flex items-center gap-2 text-sm opacity-60 hover:opacity-100 transition-opacity"
+                >
+                  <RotateCcw className="h-4 w-4" /> Reset Timer
+                </button>
+                <div className="h-1.5 w-1.5 rounded-full bg-white/20"></div>
+                <div className="flex items-center gap-2 text-sm opacity-60">
+                  <Flame className="h-4 w-4 text-orange-400" /> Sedang Bertumbuh
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="absolute bottom-12 opacity-30 text-[10px] uppercase font-mono tracking-widest">
+            Don't worry about the rest. Just focus on this step.
+          </div>
+        </div>
+      )}
+
       {/* DASHBOARD MODAL */}
       {showDashboard && (
-        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#F9F7F2] border border-[#E5E0D5] w-full max-w-2xl rounded-[40px] p-6 md:p-10 shadow-2xl relative overflow-hidden flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 dark:bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#F9F7F2] dark:bg-[#1A1F1A] border border-[#E5E0D5] dark:border-[#2D3A2F] w-full max-w-2xl rounded-[40px] p-6 md:p-10 shadow-2xl relative overflow-hidden flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fadeIn">
             <button
               onClick={() => setShowDashboard(false)}
-              className="absolute top-6 right-6 h-10 w-10 rounded-full bg-white border border-[#E5E0D5] flex items-center justify-center text-[#8B8374] hover:text-[#3A3A3A] transition-all z-10"
+              className="absolute top-6 right-6 h-10 w-10 rounded-full bg-white dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] flex items-center justify-center text-[#8B8374] dark:text-[#A09B90] hover:text-[#3A3A3A] dark:hover:text-[#E0E0E0] transition-all z-10"
             >
               <X className="h-5 w-5" />
             </button>
 
             <div className="flex flex-col gap-1">
-              <h2 className="text-2xl font-bold font-display text-[#4A5D4D] flex items-center gap-3">
+              <h2 className="text-2xl font-bold font-display text-[#4A5D4D] dark:text-[#ADCB91] flex items-center gap-3">
                 <TrendingUp className="h-6 w-6 text-[#8DAA91]" />
                 Emotional Insights Dashboard
               </h2>
-              <p className="text-xs text-[#7A7469]">
+              <p className="text-xs text-[#7A7469] dark:text-[#A09B90]">
                 Tracking perjalanan mental kamu minggu ini.
               </p>
             </div>
 
             {isStatsLoading ? (
-              <div className="py-20 flex flex-col items-center justify-center gap-4">
-                <Loader2 className="h-10 w-10 animate-spin text-[#8DAA91]" />
-                <p className="text-sm font-mono text-[#8B8374]">
-                  Mengkalkulasi data emosi kamu...
-                </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4">
+                <div className="flex flex-col gap-4">
+                  <div className="h-4 w-24 skeleton mb-2"></div>
+                  <div className="h-64 w-full skeleton rounded-3xl"></div>
+                </div>
+                <div className="flex flex-col gap-4">
+                  <div className="h-4 w-24 skeleton mb-2"></div>
+                  <div className="h-64 w-full skeleton rounded-3xl"></div>
+                </div>
               </div>
             ) : stats ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4">
@@ -1347,7 +1457,7 @@ export default function App() {
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#8DAA91]">
                     Top Emotions
                   </h3>
-                  <div className="bg-white border border-[#E5E0D5] p-5 rounded-3xl flex flex-col gap-4 shadow-sm">
+                  <div className="bg-white dark:bg-[#121612] border border-[#E5E0D5] dark:border-[#2D3A2F] p-5 rounded-3xl flex flex-col gap-4 shadow-sm">
                     {stats.top_emotions?.length > 0 ? (
                       stats.top_emotions.map((em: any, idx: number) => {
                         const colors = [
@@ -1363,11 +1473,11 @@ export default function App() {
                         );
                         return (
                           <div key={idx} className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-xs font-bold text-[#4A5D4D]">
+                            <div className="flex justify-between text-xs font-bold text-[#4A5D4D] dark:text-[#ADCB91]">
                               <span>{em.label}</span>
                               <span className="font-mono">{em.count}</span>
                             </div>
-                            <div className="h-2 w-full bg-[#F2EDE4] rounded-full overflow-hidden">
+                            <div className="h-2 w-full bg-[#F2EDE4] dark:bg-[#2D3A2F] rounded-full overflow-hidden">
                               <div
                                 className={`h-full ${colors[idx % colors.length]} rounded-full transition-all duration-1000`}
                                 style={{ width: `${percent}%` }}
@@ -1377,7 +1487,7 @@ export default function App() {
                         );
                       })
                     ) : (
-                      <p className="text-xs text-[#8B8374] py-10 text-center italic">
+                      <p className="text-xs text-[#8B8374] dark:text-[#A09B90] py-10 text-center italic">
                         Belum ada data emosi terkumpul.
                       </p>
                     )}
@@ -1401,7 +1511,7 @@ export default function App() {
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#8DAA91]">
                     Activity (Last 7 Days)
                   </h3>
-                  <div className="bg-white border border-[#E5E0D5] p-5 rounded-3xl flex-grow shadow-sm flex flex-col">
+                  <div className="bg-white dark:bg-[#121612] border border-[#E5E0D5] dark:border-[#2D3A2F] p-5 rounded-3xl flex-grow shadow-sm flex flex-col">
                     <div className="flex-grow flex items-end justify-between gap-2 h-40 pt-4">
                       {[...Array(7)].map((_, i) => {
                         const date = new Date();
@@ -1421,7 +1531,7 @@ export default function App() {
                           >
                             <div className="w-full relative group">
                               <div
-                                className={`w-full rounded-t-lg transition-all duration-700 ${dayData ? "bg-[#8DAA91]" : "bg-[#F2EDE4]"}`}
+                                className={`w-full rounded-t-lg transition-all duration-700 ${dayData ? "bg-[#8DAA91]" : "bg-[#F2EDE4] dark:bg-[#2D3A2F]"}`}
                                 style={{
                                   height: `${height}%`,
                                   minHeight: "8px",
@@ -1433,7 +1543,7 @@ export default function App() {
                                 </span>
                               )}
                             </div>
-                            <span className="text-[9px] font-mono text-[#8B8374] uppercase">
+                            <span className="text-[9px] font-mono text-[#8B8374] dark:text-[#A09B90] uppercase">
                               {date.toLocaleDateString("id-ID", {
                                 weekday: "short",
                               })}
@@ -1442,34 +1552,34 @@ export default function App() {
                         );
                       })}
                     </div>
-                    <p className="text-[10px] text-[#8B8374] mt-4 italic text-center underline decoration-[#8DAA91]/30">
+                    <p className="text-[10px] text-[#8B8374] dark:text-[#A09B90] mt-4 italic text-center underline decoration-[#8DAA91]/30">
                       Grafik menunjukkan intensitas curhatan harian kamu.
                     </p>
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="text-center py-20 text-[#8B8374]">
+              <p className="text-center py-20 text-[#8B8374] dark:text-[#A09B90]">
                 Gagal memuat statistik.
               </p>
             )}
 
             <div className="bg-[#D9AE94]/10 border border-[#D9AE94]/30 p-4 rounded-2xl flex items-start gap-3">
               <Heart className="h-5 w-5 text-[#D9AE94] shrink-0" />
-              <p className="text-[11px] text-[#7A7469] leading-relaxed">
+              <p className="text-[11px] text-[#7A7469] dark:text-[#A09B90] leading-relaxed">
                 <strong>MindStep Note:</strong> Dashboard ini bantu kamu sadar
                 pola emosi kamu. Ingat, *it's okay not to be okay*. Setiap
                 progress kecil tetaplah progress!
               </p>
             </div>
 
-            <div className="mt-4 pt-6 border-t border-[#E5E0D5] flex flex-col gap-3">
+            <div className="mt-4 pt-6 border-t border-[#E5E0D5] dark:border-[#2D3A2F] flex flex-col gap-3">
               <h4 className="text-[10px] font-bold uppercase tracking-widest text-red-400">
                 Danger Zone
               </h4>
               <button
                 onClick={handleResetApp}
-                className="w-full py-3 border border-red-100 bg-red-50/30 hover:bg-red-50 text-red-500 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+                className="w-full py-3 border border-red-100 dark:border-red-900 bg-red-50/30 dark:bg-red-900/10 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2"
               >
                 <Trash2 className="h-4 w-4" />
                 Hapus Semua Data & Mulai dari Awal
@@ -1481,8 +1591,8 @@ export default function App() {
 
       {/* MENTAL GARDEN MODAL */}
       {showGarden && (
-        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#F2EDE4] border border-[#E5E0D5] w-full max-w-xl rounded-[40px] p-8 md:p-12 shadow-2xl relative overflow-hidden flex flex-col items-center text-center gap-8 animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 dark:bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#F2EDE4] dark:bg-[#1A1F1A] border border-[#E5E0D5] dark:border-[#2D3A2F] w-full max-w-xl rounded-[40px] p-8 md:p-12 shadow-2xl relative overflow-hidden flex flex-col items-center text-center gap-8 animate-fadeIn">
             {/* Background elements */}
             <div className="absolute top-10 right-10 opacity-10 animate-pulse">
               <Wind className="h-20 w-20 text-[#8DAA91]" />
@@ -1493,24 +1603,24 @@ export default function App() {
 
             <button
               onClick={() => setShowGarden(false)}
-              className="absolute top-8 right-8 h-10 w-10 rounded-full bg-white border border-[#E5E0D5] flex items-center justify-center text-[#8B8374] hover:text-[#3A3A3A] transition-all z-10"
+              className="absolute top-8 right-8 h-10 w-10 rounded-full bg-white dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] flex items-center justify-center text-[#8B8374] dark:text-[#A09B90] hover:text-[#3A3A3A] dark:hover:text-[#E0E0E0] transition-all z-10"
             >
               <X className="h-5 w-5" />
             </button>
 
             <div className="flex flex-col gap-2">
-              <h2 className="text-3xl font-bold font-display text-[#4A5D4D] flex items-center justify-center gap-3">
+              <h2 className="text-3xl font-bold font-display text-[#4A5D4D] dark:text-[#ADCB91] flex items-center justify-center gap-3">
                 <Sprout className="h-8 w-8 text-[#8DAA91]" />
                 Your Mental Garden
               </h2>
-              <p className="text-sm text-[#7A7469]">
+              <p className="text-sm text-[#7A7469] dark:text-[#A09B90]">
                 Ruang tenang untuk melihat sejauh mana kamu telah bertumbuh.
               </p>
             </div>
 
             {/* MAIN PLANT VISUAL */}
             <div className="relative py-10 w-full flex flex-col items-center">
-              <div className="h-48 w-48 rounded-full bg-white/40 border border-white flex items-center justify-center relative shadow-inner">
+              <div className="h-48 w-48 rounded-full bg-white/40 dark:bg-[#2D3A2F]/40 border border-white dark:border-[#3D4D3F] flex items-center justify-center relative shadow-inner">
                 {/* Decorative Glow */}
                 <div className="absolute inset-0 bg-[#8DAA91]/10 rounded-full animate-pulse blur-xl"></div>
 
@@ -1528,20 +1638,20 @@ export default function App() {
                 )}
                 {plant.level >= 3 && (
                   <TreePine
-                    className="h-28 w-28 text-[#4A5D4D] animate-bounce z-10"
+                    className="h-28 w-28 text-[#4A5D4D] dark:text-[#ADCB91] animate-bounce z-10"
                     style={{ animationDuration: "4s" }}
                   />
                 )}
               </div>
 
               {/* Ground Shadow */}
-              <div className="h-4 w-32 bg-[#3A3A3A]/5 rounded-full mt-4 blur-sm"></div>
+              <div className="h-4 w-32 bg-[#3A3A3A]/5 dark:bg-white/5 rounded-full mt-4 blur-sm"></div>
 
               <div className="mt-8 flex flex-col items-center gap-1">
                 <div className="bg-[#4A5D4D] text-white px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-md">
                   Level {plant.level}
                 </div>
-                <p className="text-xs text-[#7A7469] mt-2 font-mono">
+                <p className="text-xs text-[#7A7469] dark:text-[#A09B90] mt-2 font-mono">
                   Total XP: {plant.xp}
                 </p>
               </div>
@@ -1549,20 +1659,20 @@ export default function App() {
 
             <div className="w-full max-w-sm flex flex-col gap-4">
               <div className="flex justify-between items-end px-1">
-                <span className="text-xs font-bold text-[#4A5D4D] uppercase tracking-wider">
+                <span className="text-xs font-bold text-[#4A5D4D] dark:text-[#ADCB91] uppercase tracking-wider">
                   Evolution Progress
                 </span>
                 <span className="text-xs font-mono font-bold text-[#8DAA91]">
                   {plant.xp % 100}%
                 </span>
               </div>
-              <div className="h-4 w-full bg-white rounded-full overflow-hidden border border-[#E5E0D5] p-1">
+              <div className="h-4 w-full bg-white dark:bg-[#121612] rounded-full overflow-hidden border border-[#E5E0D5] dark:border-[#2D3A2F] p-1">
                 <div
                   className="h-full bg-gradient-to-r from-[#8DAA91] via-[#ADCB91] to-[#8DAA91] rounded-full transition-all duration-1000 ease-out bg-[length:200%_100%] animate-shimmer"
                   style={{ width: `${plant.xp % 100}%` }}
                 ></div>
               </div>
-              <p className="text-sm italic text-[#4A5D4D] font-medium leading-relaxed bg-white/50 p-4 rounded-3xl border border-white">
+              <p className="text-sm italic text-[#4A5D4D] dark:text-[#ADCB91] font-medium leading-relaxed bg-white/50 dark:bg-[#2D3A2F]/50 p-4 rounded-3xl border border-white dark:border-[#3D4D3F]">
                 {plant.level === 1 &&
                   "🌱 Kamu baru memulai perjalanan ini. Tetap ceritakan apa yang kamu rasakan, dan biarkan tunas ini tumbuh kuat."}
                 {plant.level === 2 &&
@@ -1572,7 +1682,7 @@ export default function App() {
               </p>
             </div>
 
-            <div className="text-[10px] uppercase font-mono text-[#8B8374] tracking-widest mt-4">
+            <div className="text-[10px] uppercase font-mono text-[#8B8374] dark:text-[#A09B90] tracking-widest mt-4">
               ✨ Dirawat sejak{" "}
               {sessions.length > 0
                 ? new Date(
@@ -1586,8 +1696,8 @@ export default function App() {
 
       {/* ONBOARDING PERSONA SELECTION MODAL */}
       {showPersonaModal && (
-        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white border border-[#E5E0D5] w-full max-w-md rounded-[32px] p-8 shadow-2xl relative overflow-hidden flex flex-col gap-6 animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 dark:bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1A1F1A] border border-[#E5E0D5] dark:border-[#2D3A2F] w-full max-w-md rounded-[32px] p-8 shadow-2xl relative overflow-hidden flex flex-col gap-6 animate-fadeIn">
             <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
               <Brain className="h-24 w-24 text-[#8DAA91]" />
             </div>
@@ -1596,7 +1706,7 @@ export default function App() {
               <div className="h-12 w-12 rounded-full bg-[#8DAA91]/15 text-[#8DAA91] mx-auto flex items-center justify-center mb-4">
                 <Brain className="h-6 w-6" id="welcome-logo" />
               </div>
-              <h2 className="text-xl font-bold font-display text-[#4A5D4D]">
+              <h2 className="text-xl font-bold font-display text-[#4A5D4D] dark:text-[#ADCB91]">
                 Selamat datang di MindStep AI! 👋
               </h2>
               <p className="text-xs text-[#7A7469] mt-2 leading-relaxed">
@@ -1680,7 +1790,16 @@ export default function App() {
             </div>
 
             <div className="flex-grow overflow-y-auto pr-2 space-y-8 py-4 custom-scrollbar">
-              {diaryItems.length > 0 ? (
+              {isDiaryLoading ? (
+                <div className="space-y-6">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex flex-col gap-3">
+                      <div className="h-4 w-32 skeleton"></div>
+                      <div className="h-24 w-full skeleton rounded-3xl"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : diaryItems.length > 0 ? (
                 <div className="relative border-l-2 border-[#E5E0D5] ml-4 pl-8 space-y-10">
                   {diaryItems.map((item, idx) => (
                     <div
@@ -1769,7 +1888,7 @@ export default function App() {
         </div>
       )}
       {/* MOBILE BOTTOM NAVIGATION BAR */}
-      <nav className="md:hidden fixed bottom-6 left-6 right-6 z-50 bg-[#F2EDE4]/90 backdrop-blur-lg border border-[#E5E0D5] rounded-full shadow-2xl px-6 py-3 flex items-center justify-between">
+      <nav className="md:hidden fixed bottom-6 left-6 right-6 z-50 bg-[#F2EDE4]/90 dark:bg-[#1A1F1A]/90 backdrop-blur-lg border border-[#E5E0D5] dark:border-[#2D3A2F] rounded-full shadow-2xl px-6 py-3 flex items-center justify-between">
         <button
           onClick={() => {
             setShowDashboard(false);
