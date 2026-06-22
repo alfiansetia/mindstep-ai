@@ -1723,16 +1723,16 @@ export default function App() {
                   localStorage.setItem("mindstep_persona", "genz");
                   setShowPersonaModal(false);
                 }}
-                className="group border border-[#E5E0D5] hover:border-[#8DAA91] rounded-2xl p-4 text-left flex items-start gap-4 bg-[#F9F7F2]/40 hover:bg-[#8DAA91]/5 transition-all text-sm"
+                className="group border border-[#E5E0D5] dark:border-[#2D3A2F] hover:border-[#8DAA91] rounded-2xl p-4 text-left flex items-start gap-4 bg-[#F9F7F2]/40 dark:bg-[#1A1F1A]/40 hover:bg-[#8DAA91]/5 dark:hover:bg-[#8DAA91]/10 transition-all text-sm"
               >
                 <div className="h-8 w-8 rounded-full bg-[#8DAA91] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                   Z
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-[#4A5D4D] group-hover:text-[#8DAA91] transition-all">
+                  <h4 className="font-bold text-sm text-[#4A5D4D] dark:text-[#ADCB91] group-hover:text-[#8DAA91] transition-all">
                     Generasi Z (Jaksel style)
                   </h4>
-                  <p className="text-xs text-[#7A7469] mt-1 leading-relaxed">
+                  <p className="text-xs text-[#7A7469] dark:text-[#A09B90] mt-1 leading-relaxed">
                     Pendekatan kasual, penuh istilah Inggris populer
                     ("overwhelmed", "burnout"). Hangat & supel bak sahabat karib
                     sebaya.
@@ -1747,16 +1747,16 @@ export default function App() {
                   localStorage.setItem("mindstep_persona", "professional");
                   setShowPersonaModal(false);
                 }}
-                className="group border border-[#E5E0D5] hover:border-[#4A5D4D] rounded-2xl p-4 text-left flex items-start gap-4 bg-[#F9F7F2]/40 hover:bg-[#4A5D4D]/10 transition-all text-sm"
+                className="group border border-[#E5E0D5] dark:border-[#2D3A2F] hover:border-[#4A5D4D] rounded-2xl p-4 text-left flex items-start gap-4 bg-[#F9F7F2]/40 dark:bg-[#1A1F1A]/40 hover:bg-[#4A5D4D]/10 dark:hover:bg-[#4A5D4D]/20 transition-all text-sm"
               >
                 <div className="h-8 w-8 rounded-full bg-[#4A5D4D] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 animate-fadeIn">
                   P
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-[#4A5D4D] group-hover:text-[#4A5D4D] transition-all font-sans">
+                  <h4 className="font-bold text-sm text-[#4A5D4D] dark:text-[#ADCB91] group-hover:text-[#4A5D4D] transition-all font-sans">
                     Profesional / Umum
                   </h4>
-                  <p className="text-xs text-[#7A7469] mt-1 leading-relaxed">
+                  <p className="text-xs text-[#7A7469] dark:text-[#A09B90] mt-1 leading-relaxed">
                     Gaya bahasa yang dewasa, santun, sopan, dan terstruktur
                     dengan Bahasa Indonesia yang baku namun tetap penuh
                     kehangatan serta empati.
@@ -1770,21 +1770,21 @@ export default function App() {
 
       {/* MOOD DIARY MODAL */}
       {showDiary && (
-        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#F9F7F2] border border-[#E5E0D5] w-full max-w-2xl rounded-[40px] p-6 md:p-10 shadow-2xl relative overflow-hidden flex flex-col gap-6 max-h-[90vh] animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 dark:bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#F9F7F2] dark:bg-[#1A1F1A] border border-[#E5E0D5] dark:border-[#2D3A2F] w-full max-w-2xl rounded-[40px] p-6 md:p-10 shadow-2xl relative overflow-hidden flex flex-col gap-6 max-h-[90vh] animate-fadeIn">
             <button
               onClick={() => setShowDiary(false)}
-              className="absolute top-6 right-6 h-10 w-10 rounded-full bg-white border border-[#E5E0D5] flex items-center justify-center text-[#8B8374] hover:text-[#3A3A3A] transition-all z-10"
+              className="absolute top-6 right-6 h-10 w-10 rounded-full bg-white dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] flex items-center justify-center text-[#8B8374] dark:text-[#A09B90] hover:text-[#3A3A3A] dark:hover:text-[#E0E0E0] transition-all z-10"
             >
               <X className="h-5 w-5" />
             </button>
 
             <div className="flex flex-col gap-1 pr-12">
-              <h2 className="text-2xl font-bold font-display text-[#4A5D4D] flex items-center gap-3">
+              <h2 className="text-2xl font-bold font-display text-[#4A5D4D] dark:text-[#ADCB91] flex items-center gap-3">
                 <History className="h-6 w-6 text-[#8DAA91]" />
                 Your Mood Diary
               </h2>
-              <p className="text-xs text-[#7A7469]">
+              <p className="text-xs text-[#7A7469] dark:text-[#A09B90]">
                 Melihat kembali setiap langkah pertumbuhanmu.
               </p>
             </div>
@@ -1800,17 +1800,17 @@ export default function App() {
                   ))}
                 </div>
               ) : diaryItems.length > 0 ? (
-                <div className="relative border-l-2 border-[#E5E0D5] ml-4 pl-8 space-y-10">
+                <div className="relative border-l-2 border-[#E5E0D5] dark:border-[#2D3A2F] ml-4 pl-8 space-y-10">
                   {diaryItems.map((item, idx) => (
                     <div
                       key={item.id}
                       className="relative animate-fadeIn"
                       style={{ animationDelay: `${idx * 0.1}s` }}
                     >
-                      <div className="absolute -left-[41px] top-1.5 h-5 w-5 rounded-full bg-white border-4 border-[#8DAA91] shadow-sm"></div>
+                      <div className="absolute -left-[41px] top-1.5 h-5 w-5 rounded-full bg-white dark:bg-[#2D3A2F] border-4 border-[#8DAA91] shadow-sm"></div>
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono font-bold text-[#8B8374] uppercase tracking-widest bg-white border border-[#E5E0D5] px-2.5 py-1 rounded-full">
+                          <span className="text-[10px] font-mono font-bold text-[#8B8374] dark:text-[#A09B90] uppercase tracking-widest bg-white dark:bg-[#2D3A2F] border border-[#E5E0D5] dark:border-[#3D4D3F] px-2.5 py-1 rounded-full">
                             {new Date(item.date).toLocaleDateString("id-ID", {
                               weekday: "long",
                               day: "numeric",
@@ -1820,26 +1820,26 @@ export default function App() {
                           <span
                             className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
                               item.energy.toLowerCase().includes("tinggi")
-                                ? "bg-red-50 text-red-500 border-red-100"
+                                ? "bg-red-50 dark:bg-red-900/20 text-red-500 border-red-100 dark:border-red-900/30"
                                 : item.energy.toLowerCase().includes("sedang")
-                                  ? "bg-[#D9AE94]/10 text-[#D9AE94] border-[#D9AE94]/20"
-                                  : "bg-[#8DAA91]/10 text-[#8DAA91] border-[#8DAA91]/20"
+                                  ? "bg-[#D9AE94]/10 dark:bg-[#D9AE94]/10 text-[#D9AE94] border-[#D9AE94]/20"
+                                  : "bg-[#8DAA91]/10 dark:bg-[#8DAA91]/10 text-[#8DAA91] border-[#8DAA91]/20"
                             }`}
                           >
                             Energi: {item.energy}
                           </span>
                         </div>
-                        <div className="bg-white border border-[#E5E0D5] p-5 rounded-3xl shadow-sm hover:shadow-md transition-shadow group">
+                        <div className="bg-white dark:bg-[#121612] border border-[#E5E0D5] dark:border-[#2D3A2F] p-5 rounded-3xl shadow-sm hover:shadow-md transition-shadow group">
                           <div className="flex items-start justify-between gap-4">
                             <div>
-                              <h4 className="text-sm font-bold text-[#4A5D4D] group-hover:text-[#8DAA91] transition-colors line-clamp-1">
+                              <h4 className="text-sm font-bold text-[#4A5D4D] dark:text-[#ADCB91] group-hover:text-[#8DAA91] transition-colors line-clamp-1">
                                 {item.emotion}
                               </h4>
-                              <p className="text-xs text-[#7A7469] mt-2 leading-relaxed italic">
+                              <p className="text-xs text-[#7A7469] dark:text-[#A09B90] mt-2 leading-relaxed italic">
                                 {item.summary}
                               </p>
                             </div>
-                            <div className="h-10 w-10 flex items-center justify-center rounded-2xl bg-[#F9F7F2] border border-[#E5E0D5] shrink-0">
+                            <div className="h-10 w-10 flex items-center justify-center rounded-2xl bg-[#F9F7F2] dark:bg-[#1A1F1A] border border-[#E5E0D5] dark:border-[#2D3A2F] shrink-0">
                               {item.emotion.toLowerCase().includes("anxious") ||
                               item.emotion.toLowerCase().includes("cemas")
                                 ? "😰"
