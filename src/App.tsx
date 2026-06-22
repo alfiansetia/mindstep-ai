@@ -110,6 +110,18 @@ export default function App() {
     localStorage.setItem("mindstep_dark", darkMode.toString());
   }, [darkMode]);
 
+  const [userId] = useState<string>(() => {
+    let id = localStorage.getItem("mindstep_user_id");
+    if (!id) {
+      id =
+        "user_" +
+        Math.random().toString(36).substring(2, 11) +
+        Date.now().toString(36);
+      localStorage.setItem("mindstep_user_id", id);
+    }
+    return id;
+  });
+
   // History & Local Registry
   const [sessions, setSessions] = useState<HistorySession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -129,7 +141,9 @@ export default function App() {
 
     const fetchSessions = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/sessions`);
+        const response = await fetch(`${API_BASE_URL}/api/sessions`, {
+          headers: { "X-User-Id": userId },
+        });
         if (response.ok) {
           const parsed = (await response.json()) as HistorySession[];
           setSessions(parsed);
@@ -218,7 +232,9 @@ export default function App() {
   const fetchDiary = async () => {
     setIsDiaryLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/history`);
+      const res = await fetch(`${API_BASE_URL}/api/history`, {
+        headers: { "X-User-Id": userId },
+      });
       const data = await res.json();
       setDiaryItems(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -230,7 +246,9 @@ export default function App() {
 
   const fetchPlant = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/plant`);
+      const response = await fetch(`${API_BASE_URL}/api/plant`, {
+        headers: { "X-User-Id": userId },
+      });
       if (response.ok) {
         setPlant(await response.json());
       }
@@ -243,7 +261,10 @@ export default function App() {
     try {
       const response = await fetch(
         `${API_BASE_URL}/api/plant/grow?amount=${amount}`,
-        { method: "POST" },
+        {
+          method: "POST",
+          headers: { "X-User-Id": userId },
+        },
       );
       if (response.ok) {
         const data = await response.json();
@@ -290,7 +311,10 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/analyze`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": userId,
+        },
         body: JSON.stringify({
           curhatan: textToAnalyze,
           userPersona: userPersona,
@@ -307,7 +331,9 @@ export default function App() {
       setActiveAnalysis(data);
 
       // Refresh sessions from BE to get the newly created session
-      const sessRes = await fetch(`${API_BASE_URL}/api/sessions`);
+      const sessRes = await fetch(`${API_BASE_URL}/api/sessions`, {
+        headers: { "X-User-Id": userId },
+      });
       if (sessRes.ok) {
         const updatedSessions = await sessRes.json();
         setSessions(updatedSessions);
@@ -335,7 +361,9 @@ export default function App() {
   const fetchStats = async () => {
     setIsStatsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/stats`);
+      const response = await fetch(`${API_BASE_URL}/api/stats`, {
+        headers: { "X-User-Id": userId },
+      });
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -358,7 +386,10 @@ export default function App() {
     }
 
     try {
-      await fetch(`${API_BASE_URL}/api/reset`, { method: "POST" });
+      await fetch(`${API_BASE_URL}/api/reset`, {
+        method: "POST",
+        headers: { "X-User-Id": userId },
+      });
 
       // Clear Local Storage
       localStorage.removeItem("mindstep_sessions");
@@ -429,7 +460,10 @@ export default function App() {
           // Async sync to BE
           fetch(`${API_BASE_URL}/api/sessions/${activeSessionId}/steps`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "X-User-Id": userId,
+            },
             body: JSON.stringify(updatedStepsInSess),
           }).catch((err) => console.error("Sync error", err));
 
@@ -589,7 +623,10 @@ export default function App() {
 
     // 2. Sync with backend
     try {
-      await fetch(`${API_BASE_URL}/api/session/${id}`, { method: "DELETE" });
+      await fetch(`${API_BASE_URL}/api/session/${id}`, {
+        method: "DELETE",
+        headers: { "X-User-Id": userId },
+      });
       // Refresh stats after deletion
       fetchStats();
     } catch (e) {

@@ -5,7 +5,7 @@ import sqlite3
 import requests
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -54,10 +54,11 @@ def init_db():
         columns = [col[1] for col in cursor.fetchall()]
         if "session_id" not in columns:
             cursor.execute("ALTER TABLE user_activity ADD COLUMN session_id TEXT")
-        # Tabel untuk Mental Garden
+        # Tabel untuk Mental Garden (Sekarang per-user)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS plant_stats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT UNIQUE,
             level INTEGER DEFAULT 1,
             xp INTEGER DEFAULT 0,
             plant_type TEXT DEFAULT 'succulent'
@@ -73,10 +74,11 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
-        # Tabel untuk menyimpan session lengkap (menggantikan localStorage)
+        # Tabel untuk menyimpan session lengkap (Sekarang per-user)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY,
+            user_id TEXT,
             timestamp TEXT,
             original_curhatan TEXT,
             empathy_response TEXT,
@@ -86,6 +88,29 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
+        
+        # Backward compatibility for user_id columns
+        for table in ["user_activity", "sessions"]:
+            cursor.execute(f"PRAGMA table_info({table})")
+            cols = [col[1] for col in cursor.fetchall()]
+            if "user_id" not in cols:
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT DEFAULT 'anonymous'")
+        
+        # Migrasi plant_stats ke per-user jika ID 1 masih ada tanpa user_id
+        cursor.execute("PRAGMA table_info(plant_stats)")
+        cols = [col[1] for col in cursor.fetchall()]
+        if "user_id" not in cols:
+             # This is a bit tricky, we might just drop and recreate if it's empty or has dev data
+             cursor.execute("DROP TABLE plant_stats")
+             cursor.execute("""
+                CREATE TABLE plant_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT UNIQUE,
+                    level INTEGER DEFAULT 1,
+                    xp INTEGER DEFAULT 0,
+                    plant_type TEXT DEFAULT 'succulent'
+                )
+             """)
         
         # Masukkan baris pertama jika kosong
         cursor.execute("INSERT OR IGNORE INTO plant_stats (id, level, xp) VALUES (1, 1, 0)")
@@ -203,100 +228,84 @@ def save_semantic_cache(curhatan: str, embedding: List[float], response_data: di
     except Exception as e:
         print(f"Error saving to semantic cache: {e}")
 
-def save_user_activity(emotion: str, energy_level: str, curhatan: str, session_id: str = None):
-    """Mencatatkan histori emosi pengguna untuk keperluan statistik dashboard."""
+def log_user_activity(emotion, energy, curhatan, user_id):
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        # Simpan ringkasan curhatan (ambil 50 karakter pertama)
-        summary = (curhatan[:47] + '..') if len(curhatan) > 50 else curhatan
-        cursor.execute(
-            "INSERT INTO user_activity (emotion, energy_level, curhatan_summary, session_id) VALUES (?, ?, ?, ?)",
-            (emotion, energy_level, summary, session_id)
-        )
+        cursor.execute("""
+        INSERT INTO user_activity (emotion, energy_level, curhatan_summary, user_id)
+        VALUES (?, ?, ?, ?)
+        """, (emotion, energy, curhatan[:100], user_id))
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"Error saving to user activity: {e}")
+        print(f"Error logging activity: {e}")
 
-def save_session_to_db(session_id: str, timestamp: str, curhatan: str, response: dict):
-    """Menyimpan data session lengkap ke tabel sessions."""
+
+def save_session_full(res, user_id):
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute(
-            """INSERT OR REPLACE INTO sessions 
-               (id, timestamp, original_curhatan, empathy_response, detected_emotion, energy_level_required, micro_steps) 
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                session_id,
-                timestamp,
-                curhatan,
-                response.get("empathy_response", ""),
-                response.get("detected_emotion", ""),
-                response.get("energy_level_required", ""),
-                json.dumps(response.get("micro_steps", []))
-            )
-        )
+        cursor.execute("""
+        INSERT INTO sessions (id, user_id, timestamp, original_curhatan, empathy_response, detected_emotion, energy_level_required, micro_steps)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            res["id"], 
+            user_id,
+            res["timestamp"], 
+            res["original_curhatan"], 
+            res["empathy_response"], 
+            res["detected_emotion"], 
+            res["energy_level_required"],
+            json.dumps(res["micro_steps"])
+        ))
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"Error saving session to DB: {e}")
+        print(f"Error saving session: {e}")
 
 @app.get("/api/sessions")
-def get_sessions(limit: int = 50):
-    """Mengambil riwayat session dari database."""
-    try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, timestamp, original_curhatan, empathy_response, detected_emotion, energy_level_required, micro_steps FROM sessions ORDER BY timestamp DESC LIMIT ?", (limit,))
-        rows = cursor.fetchall()
-        conn.close()
-        
-        sessions = []
-        for r in rows:
-            sessions.append({
-                "id": r[0],
-                "timestamp": r[1],
-                "original_curhatan": r[2],
-                "empathy_response": r[3],
-                "detected_emotion": r[4],
-                "energy_level_required": r[5],
-                "micro_steps": json.loads(r[6])
-            })
-        return sessions
-    except Exception as e:
-        return {"error": str(e)}
+async def get_sessions(x_user_id: Optional[str] = Header(None)):
+    user_id = x_user_id or "anonymous"
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM sessions WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    sessions = []
+    for r in rows:
+        sessions.append({
+            "id": r["id"],
+            "timestamp": r["timestamp"],
+            "original_curhatan": r["original_curhatan"],
+            "empathy_response": r["empathy_response"],
+            "detected_emotion": r["detected_emotion"],
+            "energy_level_required": r["energy_level_required"],
+            "micro_steps": json.loads(r["micro_steps"])
+        })
+    return sessions
 
 @app.put("/api/sessions/{session_id}/steps")
-async def update_session_steps(session_id: str, steps: List[dict]):
-    """Update status micro_steps dalam suatu session."""
-    try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE sessions SET micro_steps = ? WHERE id = ?",
-            (json.dumps(steps), session_id)
-        )
-        conn.commit()
-        conn.close()
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def update_steps(session_id: str, steps: List[dict], x_user_id: Optional[str] = Header(None)):
+    user_id = x_user_id or "anonymous"
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE sessions SET micro_steps = ? WHERE id = ? AND user_id = ?", (json.dumps(steps), session_id, user_id))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
 
 @app.delete("/api/session/{session_id}")
-def delete_session(session_id: str):
-    """Menghapus data aktivitas & session berdasarkan session_id."""
-    try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM user_activity WHERE session_id = ?", (session_id,))
-        cursor.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-        conn.commit()
-        conn.close()
-        return {"status": "deleted"}
-    except Exception as e:
-        return {"error": str(e), "status": "failed"}
+async def delete_session(session_id: str, x_user_id: Optional[str] = Header(None)):
+    user_id = x_user_id or "anonymous"
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
+    conn.commit()
+    conn.close()
+    return {"status": "deleted"}
 
 # Pydantic Schemas untuk menangani request dan response terstruktur
 class MicroStep(BaseModel):
@@ -323,59 +332,66 @@ def health_check():
     return {"status": "ok", "engine": provider}
 
 @app.get("/api/stats")
-def get_stats():
-    """Mengambil statistik emosi untuk ditampilkan di dashboard."""
-    try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
-        cursor = conn.cursor()
-        
-        # 1. Hitung distribusi emosi
-        cursor.execute("SELECT emotion, COUNT(*) FROM user_activity GROUP BY emotion ORDER BY COUNT(*) DESC LIMIT 5")
-        emotions = [{"label": row[0], "count": row[1]} for row in cursor.fetchall()]
-        
-        # 2. Hitung aktivitas 7 hari terakhir
-        cursor.execute("SELECT created_at, COUNT(*) FROM user_activity WHERE created_at > date('now', '-7 days') GROUP BY created_at")
-        activity = [{"date": row[0], "count": row[1]} for row in cursor.fetchall()]
-        
-        # 3. Total curhatan
-        cursor.execute("SELECT COUNT(*) FROM user_activity")
-        total = cursor.fetchone()[0]
-        
-        conn.close()
-        return {
-            "top_emotions": emotions,
-            "weekly_activity": activity,
-            "total_curhatan": total
-        }
-    except Exception as e:
-        return {"error": str(e)}
+async def get_stats(x_user_id: Optional[str] = Header(None)):
+    user_id = x_user_id or "anonymous"
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 1. Top Emotions
+    cursor.execute("""
+        SELECT emotion, COUNT(*) as count 
+        FROM user_activity 
+        WHERE user_id = ?
+        GROUP BY emotion 
+        ORDER BY count DESC LIMIT 5
+    """, (user_id,))
+    emotions = [{"label": row[0], "count": row[1]} for row in cursor.fetchall()]
+    
+    # 2. Activity logic
+    cursor.execute("""
+        SELECT created_at, COUNT(*) 
+        FROM user_activity 
+        WHERE user_id = ?
+        GROUP BY created_at 
+        ORDER BY created_at DESC LIMIT 7
+    """, (user_id,))
+    activity = [{"date": row[0], "count": row[1]} for row in cursor.fetchall()]
+    
+    # 3. Total curhatan
+    cursor.execute("SELECT COUNT(*) FROM user_activity WHERE user_id = ?", (user_id,))
+    total = cursor.fetchone()[0]
+    
+    conn.close()
+    return {
+        "top_emotions": emotions,
+        "weekly_activity": activity,
+        "total_curhatan": total
+    }
 
 @app.get("/api/history")
-def get_detailed_history(limit: int = 20):
-    """Mengambil history curhat detail untuk tampilan Diary."""
-    try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, emotion, energy_level, curhatan_summary, created_at, session_id FROM user_activity ORDER BY id DESC LIMIT ?",
-            (limit,)
-        )
-        rows = cursor.fetchall()
-        conn.close()
-        
-        history = []
-        for r in rows:
-            history.append({
-                "id": r[0],
-                "emotion": r[1],
-                "energy": r[2],
-                "summary": r[3],
-                "date": r[4],
-                "session_id": r[5]
-            })
-        return history
-    except Exception as e:
-        return {"error": str(e)}
+async def get_mood_diary(x_user_id: Optional[str] = Header(None)):
+    user_id = x_user_id or "anonymous"
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT created_at, emotion, energy_level, curhatan_summary 
+        FROM user_activity 
+        WHERE user_id = ?
+        ORDER BY created_at DESC LIMIT 20
+    """, (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    history = []
+    for r in rows:
+        history.append({
+            "date": r[0],
+            "emotion": r[1],
+            "energy": r[2],
+            "summary": r[3],
+            "id": f"{r[0]}-{r[1]}"
+        })
+    return history
 
 @app.get("/api/quote")
 def get_daily_quote(persona: str = "genz"):
@@ -383,69 +399,69 @@ def get_daily_quote(persona: str = "genz"):
     return {"quote": "", "author": ""}
 
 @app.get("/api/plant")
-def get_plant():
-    """Mengambil status tanaman mental."""
-    try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
-        cursor = conn.cursor()
-        cursor.execute("SELECT level, xp, plant_type FROM plant_stats WHERE id = 1")
-        row = cursor.fetchone()
-        conn.close()
-        return {"level": row[0], "xp": row[1], "type": row[2]}
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.post("/api/plant/grow")
-def grow_plant(amount: int = 10):
-    """Menambah XP tanaman mental (misal 10 XP per tugas selesai)."""
-    try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
-        cursor = conn.cursor()
-        cursor.execute("UPDATE plant_stats SET xp = xp + ? WHERE id = 1", (amount,))
-        
-        # Logika Level Up (tiap 100 XP naik level)
-        cursor.execute("SELECT xp, level FROM plant_stats WHERE id = 1")
-        row = cursor.fetchone()
-        xp, level = row[0], row[1]
-        
-        new_level = (xp // 100) + 1
-        if new_level > level:
-            cursor.execute("UPDATE plant_stats SET level = ? WHERE id = 1", (new_level,))
-            level = new_level
-            
+async def get_plant_stats(x_user_id: Optional[str] = Header(None)):
+    user_id = x_user_id or "anonymous"
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT level, xp, plant_type FROM plant_stats WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    
+    if not row:
+        # Buat baru untuk user unik ini
+        cursor.execute("INSERT INTO plant_stats (user_id, level, xp, plant_type) VALUES (?, 1, 0, 'succulent')", (user_id,))
         conn.commit()
-        conn.close()
-        return {"status": "ok", "new_xp": xp, "level": level}
-    except Exception as e:
-        if 'conn' in locals(): conn.close()
-        return {"error": str(e)}
+        return {"level": 1, "xp": 0, "plant_type": "succulent"}
+        
+    conn.close()
+    return {"level": row[0], "xp": row[1], "plant_type": row[2] or "succulent"}
+
+@app.post("/api/plant/xp")
+async def add_xp(amount: int, x_user_id: Optional[str] = Header(None)):
+    user_id = x_user_id or "anonymous"
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Ambil data lama
+    cursor.execute("SELECT level, xp FROM plant_stats WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if not row:
+        row = (1, 0)
+        cursor.execute("INSERT INTO plant_stats (user_id, level, xp) VALUES (?, 1, 0)", (user_id,))
+        
+    level, xp = row
+    new_xp = xp + amount
+    
+    # Level up logic: every 100 XP
+    new_level = level + (new_xp // 100)
+    remaining_xp = new_xp % 100
+    
+    cursor.execute("UPDATE plant_stats SET level = ?, xp = ? WHERE user_id = ?", (new_level, remaining_xp, user_id))
+    conn.commit()
+    conn.close()
+    return {"level": new_level, "xp": remaining_xp}
 
 @app.post("/api/reset")
-def reset_all_data():
-    """Mereset seluruh data aplikasi (Aktivitas, Garden, & Semantic Cache)."""
+async def reset_all_data(x_user_id: Optional[str] = Header(None)):
+    user_id = x_user_id or "anonymous"
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        # Kosongkan histori emosi
-        cursor.execute("DELETE FROM user_activity")
-        # Kosongkan Semantic Cache agar AI menganalisis ulang dari nol
-        cursor.execute("DELETE FROM semantic_cache")
-        # Reset Mental Garden
-        cursor.execute("UPDATE plant_stats SET level = 1, xp = 0 WHERE id = 1")
-        # Kosongkan histori session (Chat History)
-        cursor.execute("DELETE FROM sessions")
+        cursor.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM user_activity WHERE user_id = ?", (user_id,))
+        cursor.execute("UPDATE plant_stats SET level = 1, xp = 0 WHERE user_id = ?", (user_id,))
         conn.commit()
         conn.close()
-        return {"status": "success", "message": "Semua data termasuk cache memori AI berhasil dihapus."}
+        return {"status": "data cleared for user"}
     except Exception as e:
-        return {"error": str(e), "status": "failed"}
+        return {"error": str(e)}
 
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
-async def analyze_brain_dump(request: AnalysisRequest):
+async def analyze_brain_dump(request: AnalysisRequest, x_user_id: Optional[str] = Header(None)):
     """
     Endpoint utama untuk menganalisis curhatan pengguna menggunakan engine LLM pilihan.
     """
+    user_id = x_user_id or "anonymous"
     # Batasi input maksimal 3000 karakter demi performa
     if len(request.curhatan) > 3000:
         raise HTTPException(status_code=400, detail="Curhatan kamu terlalu panjang (maksimal 3000 karakter). Coba cicil dulu ya!")
@@ -458,6 +474,13 @@ async def analyze_brain_dump(request: AnalysisRequest):
         embedding = get_embedding(request.curhatan)
         cached_response = find_semantic_cache(embedding, persona)
         if cached_response:
+            # Simpan ke riwayat session per user
+            from datetime import datetime
+            cached_response["id"] = request.sessionId or f"sess_{int(datetime.now().timestamp())}"
+            cached_response["timestamp"] = datetime.now().isoformat()
+            cached_response["original_curhatan"] = request.curhatan
+            save_session_full(cached_response, user_id)
+            log_user_activity(cached_response.get("detected_emotion", "Unknown"), cached_response.get("energy_level_required", "Rendah"), request.curhatan, user_id)
             return cached_response
     
     # 2. Panggil Engine LLM yang dipilih (Ollama, OpenAI, dll)
@@ -469,23 +492,31 @@ async def analyze_brain_dump(request: AnalysisRequest):
         if SEMANTIC_CACHE_ENABLED and embedding:
             save_semantic_cache(request.curhatan, embedding, parsed_data, persona)
             
-        save_user_activity(
+        from datetime import datetime
+        now_ts = datetime.now().isoformat()
+        session_id = request.sessionId or f"sess_{int(datetime.now().timestamp())}"
+        
+        # Prepare full session data
+        full_session = {
+            "id": session_id,
+            "timestamp": now_ts,
+            "original_curhatan": request.curhatan,
+            "empathy_response": parsed_data.get("empathy_response", ""),
+            "detected_emotion": parsed_data.get("detected_emotion", ""),
+            "energy_level_required": parsed_data.get("energy_level_required", ""),
+            "micro_steps": parsed_data.get("micro_steps", [])
+        }
+        
+        save_session_full(full_session, user_id)
+        log_user_activity(
             parsed_data.get("detected_emotion", "Unknown"),
             parsed_data.get("energy_level_required", "Rendah"),
             request.curhatan,
-            request.sessionId
-        )
-
-        from datetime import datetime
-        now_ts = datetime.now().isoformat()
-        save_session_to_db(
-            request.sessionId or f"sess_{int(datetime.now().timestamp())}",
-            now_ts,
-            request.curhatan,
-            parsed_data
+            user_id
         )
             
-        return parsed_data
+        return full_session
+
 
     except Exception as e:
         print(f"🚨 [Analysis Error]: {str(e)}")
