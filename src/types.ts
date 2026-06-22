@@ -17,7 +17,6 @@ export interface HistorySession {
   id: string;
   timestamp: string; // ISO String
   original_curhatan: string;
-  contextHistory?: string;
   empathy_response: string;
   detected_emotion: string;
   energy_level_required: string;

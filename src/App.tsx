@@ -3,42 +3,62 @@ import React, { useState, useEffect, useRef } from "react";
 // Base URL API — dikonfigurasi via .env (VITE_API_BASE_URL)
 // Kosong = relative ke server saat ini (server.ts port 3000)
 // Diisi  = langsung hit Python FastAPI, misal: http://localhost:8000
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-import { 
-  Brain, 
-  Sparkles, 
-  Mic, 
-  MicOff, 
-  Play, 
-  Pause, 
-  RotateCcw, 
-  Volume2, 
-  Flame, 
-  Clock, 
-  CheckCircle2, 
-  History, 
-  Trash2, 
-  Loader2, 
-  ChevronRight, 
-  Heart, 
+// Helper untuk menangani ImportMeta (Vite fix)
+const metaEnv = (import.meta as any).env || {};
+const API_BASE_URL = (metaEnv.VITE_API_BASE_URL || "").replace(/\/$/, "");
+import {
+  Brain,
+  Sparkles,
+  Mic,
+  MicOff,
+  Play,
+  Pause,
+  RotateCcw,
+  Volume2,
+  Flame,
+  Clock,
+  CheckCircle2,
+  History,
+  Trash2,
+  Loader2,
+  ChevronRight,
+  Heart,
   Calendar,
   Layers,
-  Sparkle
+  Sparkle,
+  BarChart3,
+  TrendingUp,
+  Activity,
+  X,
+  Sprout,
+  Flower2,
+  TreePine,
+  Wind,
 } from "lucide-react";
-import { type MicroStep, type AnalysisResponse, type HistorySession } from "./types";
+import {
+  type MicroStep,
+  type AnalysisResponse,
+  type HistorySession,
+} from "./types";
 
 export default function App() {
   // Application Data States
-  const [userPersona, setUserPersona] = useState<"genz" | "professional">("genz");
+  const [userPersona, setUserPersona] = useState<"genz" | "professional">(
+    "genz",
+  );
   const [showPersonaModal, setShowPersonaModal] = useState<boolean>(false);
 
   const [curhatan, setCurhatan] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  
+
   // Active response & session details
-  const [activeAnalysis, setActiveAnalysis] = useState<AnalysisResponse | null>(null);
-  const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({});
-  
+  const [activeAnalysis, setActiveAnalysis] = useState<AnalysisResponse | null>(
+    null,
+  );
+  const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>(
+    {},
+  );
+
   // Speech Recognition (Web Speech API) States
   const [isListening, setIsListening] = useState<boolean>(false);
   const recognitionRef = useRef<any>(null);
@@ -55,12 +75,27 @@ export default function App() {
   const [timerStepId, setTimerStepId] = useState<number | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Dashboard & Stats States
+  const [showDashboard, setShowDashboard] = useState<boolean>(false);
+  const [stats, setStats] = useState<any>(null);
+  const [isStatsLoading, setIsStatsLoading] = useState<boolean>(false);
+
+  // Mental Garden States
+  const [plant, setPlant] = useState<any>({
+    level: 1,
+    xp: 0,
+    type: "succulent",
+  });
+  const [showGarden, setShowGarden] = useState<boolean>(false);
+  const [showPlantPopup, setShowPlantPopup] = useState<boolean>(false);
+
   // History & Local Registry
   const [sessions, setSessions] = useState<HistorySession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // Onboarding default demo triggers
-  const demoCurhatan = "Aduh asli gue makin overthinking banget hari ini, mana besok udah harus bimbingan lagi tapi revisian yang kemarin belum gue sentuh sama sekali. Tiap mau buka file-nya bawaannya pengen nangis, overwhelmed parah, ga tahu harus mulai dari mana.";
+  const demoCurhatan =
+    "Aduh asli gue makin overthinking banget hari ini, mana besok udah harus bimbingan lagi tapi revisian yang kemarin belum gue sentuh sama sekali. Tiap mau buka file-nya bawaannya pengen nangis, overwhelmed parah, ga tahu harus mulai dari mana.";
 
   // Load Initial Session History & Preferences from localStorage
   useEffect(() => {
@@ -84,11 +119,11 @@ export default function App() {
             empathy_response: latest.empathy_response,
             detected_emotion: latest.detected_emotion,
             energy_level_required: latest.energy_level_required,
-            micro_steps: latest.micro_steps
+            micro_steps: latest.micro_steps,
           });
           // Restore completion state
           const completions: Record<number, boolean> = {};
-          latest.micro_steps.forEach(step => {
+          latest.micro_steps.forEach((step) => {
             completions[step.step_id] = step.completed || false;
           });
           setCompletedSteps(completions);
@@ -97,9 +132,11 @@ export default function App() {
         console.error("Error restoring history", e);
       }
     }
-    
-    // Check Speech Recognition capability
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+
     if (SpeechRecognition) {
       const rec = new SpeechRecognition();
       rec.continuous = true;
@@ -134,7 +171,9 @@ export default function App() {
 
       rec.onerror = (err: any) => {
         console.error("Speech Recognition Error", err);
-        setSpeechFeedback(`Gagal mendengar: ${err.error || "Mungkin microphone diblokir"}`);
+        setSpeechFeedback(
+          `Gagal mendengar: ${err.error || "Mungkin microphone diblokir"}`,
+        );
         setIsListening(false);
       };
 
@@ -145,7 +184,41 @@ export default function App() {
 
       recognitionRef.current = rec;
     }
+
+    // Initial Plant Fetch
+    fetchPlant();
   }, []);
+
+  const fetchPlant = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/plant`);
+      if (response.ok) {
+        setPlant(await response.json());
+      }
+    } catch (e) {
+      console.error("Failed to fetch plant stats", e);
+    }
+  };
+
+  const growPlant = async (amount: number = 15) => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/plant/grow?amount=${amount}`,
+        { method: "POST" },
+      );
+      if (response.ok) {
+        const data = await response.json();
+        const levedUp = data.level > plant.level;
+        setPlant({ ...plant, xp: data.new_xp, level: data.level });
+        if (levedUp) {
+          setShowPlantPopup(true);
+          setTimeout(() => setShowPlantPopup(false), 4000);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to grow plant", e);
+    }
+  };
 
   // Save Sessions helper
   const saveSessionsToLocal = (updatedSessions: HistorySession[]) => {
@@ -160,12 +233,7 @@ export default function App() {
     stopTTS();
     stopTimer();
 
-    // Buat riwayat konteks secara otomatis dari 3 sesi terakhir agar AI mengingat percakapan sebelumnya
-    const computedContextHistory = sessions
-      .slice(0, 3)
-      .map(s => `User: "${s.original_curhatan}"\nAI: "${s.empathy_response}"`)
-      .reverse()
-      .join("\n\n");
+    const sessionId = "sess_" + Date.now();
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/analyze`, {
@@ -173,9 +241,9 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           curhatan: textToAnalyze,
-          contextHistory: computedContextHistory,
-          userPersona: userPersona
-        })
+          userPersona: userPersona,
+          sessionId: sessionId,
+        }),
       });
 
       if (!response.ok) {
@@ -187,33 +255,88 @@ export default function App() {
 
       // Check default checkmarks
       const stepCompletions: Record<number, boolean> = {};
-      data.micro_steps.forEach(step => {
+      data.micro_steps.forEach((step) => {
         stepCompletions[step.step_id] = false;
       });
       setCompletedSteps(stepCompletions);
 
       // Save into history
       const newSession: HistorySession = {
-        id: "sess_" + Date.now(),
+        id: sessionId,
         timestamp: new Date().toISOString(),
         original_curhatan: textToAnalyze,
-        contextHistory: computedContextHistory,
         empathy_response: data.empathy_response,
         detected_emotion: data.detected_emotion,
         energy_level_required: data.energy_level_required,
-        micro_steps: data.micro_steps
+        micro_steps: data.micro_steps,
       };
 
       const updated = [newSession, ...sessions];
       saveSessionsToLocal(updated);
       setActiveSessionId(newSession.id);
-
     } catch (error: any) {
       console.error(error);
       alert("Gagal memproses curhatan kamu. Silakan coba lagi sebentar!");
     } finally {
       setIsLoading(false);
+      // Refresh stats automatically after analysis
+      if (showDashboard) fetchStats();
     }
+  };
+
+  // Fetch Dashboard Statistics from API
+  const fetchStats = async () => {
+    setIsStatsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/stats`);
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch stats", e);
+    } finally {
+      setIsStatsLoading(false);
+    }
+  };
+
+  // Global Reset Function
+  const handleResetApp = async () => {
+    if (
+      !confirm(
+        "⚠️ PERINGATAN: Ini akan menghapus seluruh riwayat curhat dan progres taman kamu selamanya. Lanjutkan?",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await fetch(`${API_BASE_URL}/api/reset`, { method: "POST" });
+
+      // Clear Local Storage
+      localStorage.removeItem("mindstep_sessions");
+      localStorage.removeItem("mindstep_persona");
+
+      // Reset All States
+      setSessions([]);
+      setActiveAnalysis(null);
+      setActiveSessionId(null);
+      setCurhatan("");
+      setPlant({ level: 1, xp: 0, type: "succulent" });
+      setStats(null);
+      setShowDashboard(false);
+
+      // Show Persona Modal again
+      setShowPersonaModal(true);
+    } catch (e) {
+      alert("Gagal mereset data. Coba lagi nanti.");
+    }
+  };
+
+  // Toggle Dashboard
+  const toggleDashboard = () => {
+    if (!showDashboard) fetchStats();
+    setShowDashboard(!showDashboard);
   };
 
   // Custom demo preset loader
@@ -230,22 +353,27 @@ export default function App() {
   const toggleStepCompleted = (stepId: number) => {
     const updatedCompletions = {
       ...completedSteps,
-      [stepId]: !completedSteps[stepId]
+      [stepId]: !completedSteps[stepId],
     };
     setCompletedSteps(updatedCompletions);
 
+    // If step is newly completed, award XP to Mental Garden
+    if (updatedCompletions[stepId]) {
+      growPlant(20); // 20 XP per completed task
+    }
+
     // Update session record in stored history
     if (activeSessionId) {
-      const updatedSessions = sessions.map(sess => {
+      const updatedSessions = sessions.map((sess) => {
         if (sess.id === activeSessionId) {
           return {
             ...sess,
-            micro_steps: sess.micro_steps.map(step => {
+            micro_steps: sess.micro_steps.map((step) => {
               if (step.step_id === stepId) {
                 return { ...step, completed: updatedCompletions[stepId] };
               }
               return step;
-            })
+            }),
           };
         }
         return sess;
@@ -267,10 +395,12 @@ export default function App() {
 
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "id-ID";
-      
+
       // Try to find a warm female/male Indonesian or generic soft voice
       const voices = window.speechSynthesis.getVoices();
-      const idVoice = voices.find(v => v.lang.includes("id-ID") || v.lang.includes("id"));
+      const idVoice = voices.find(
+        (v) => v.lang.includes("id-ID") || v.lang.includes("id"),
+      );
       if (idVoice) {
         utterance.voice = idVoice;
       }
@@ -302,7 +432,9 @@ export default function App() {
   // Web Speech API Voice Dictation toggle
   const toggleVoiceDictation = () => {
     if (!recognitionRef.current) {
-      alert("Speech recognition tidak didukung di browser ini. Direkomendasikan menggunakan Google Chrome.");
+      alert(
+        "Speech recognition tidak didukung di browser ini. Direkomendasikan menggunakan Google Chrome.",
+      );
       return;
     }
 
@@ -363,11 +495,11 @@ export default function App() {
       empathy_response: session.empathy_response,
       detected_emotion: session.detected_emotion,
       energy_level_required: session.energy_level_required,
-      micro_steps: session.micro_steps
+      micro_steps: session.micro_steps,
     });
 
     const completions: Record<number, boolean> = {};
-    session.micro_steps.forEach(step => {
+    session.micro_steps.forEach((step) => {
       completions[step.step_id] = step.completed || false;
     });
     setCompletedSteps(completions);
@@ -376,17 +508,29 @@ export default function App() {
   };
 
   // Delete a specific session from registry
-  const deleteSession = (e: React.MouseEvent, id: string) => {
+  const deleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    const updated = sessions.filter(sess => sess.id !== id);
+
+    // 1. Delete from local state first for instant feedback
+    const updated = sessions.filter((sess) => sess.id !== id);
     saveSessionsToLocal(updated);
-    if (activeSessionId === idTitleOf(id)) {
+
+    if (activeSessionId === id) {
       if (updated.length > 0) {
         loadPreviousSession(updated[0]);
       } else {
         setActiveSessionId(null);
         setActiveAnalysis(null);
       }
+    }
+
+    // 2. Sync with backend
+    try {
+      await fetch(`${API_BASE_URL}/api/session/${id}`, { method: "DELETE" });
+      // Refresh stats after deletion
+      fetchStats();
+    } catch (e) {
+      console.error("Failed to sync deletion with backend", e);
     }
   };
 
@@ -400,7 +544,7 @@ export default function App() {
         bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
         pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
         glow: "shadow-soft",
-        title: "text-[#4A5D4D]"
+        title: "text-[#4A5D4D]",
       };
     }
     if (em.includes("burnout") || em.includes("lelah")) {
@@ -408,7 +552,7 @@ export default function App() {
         bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
         pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
         glow: "shadow-soft",
-        title: "text-[#4A5D4D]"
+        title: "text-[#4A5D4D]",
       };
     }
     if (em.includes("overwhelmed") || em.includes("stres")) {
@@ -416,7 +560,7 @@ export default function App() {
         bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
         pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
         glow: "shadow-soft",
-        title: "text-[#4A5D4D]"
+        title: "text-[#4A5D4D]",
       };
     }
     if (em.includes("confused") || em.includes("bingung")) {
@@ -424,14 +568,14 @@ export default function App() {
         bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
         pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
         glow: "shadow-soft",
-        title: "text-[#4A5D4D]"
+        title: "text-[#4A5D4D]",
       };
     }
     return {
       bg: "bg-white border-[#E5E0D5] text-[#3A3A3A]",
       pill: "bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]",
       glow: "shadow-soft",
-      title: "text-[#4A5D4D]"
+      title: "text-[#4A5D4D]",
     };
   };
 
@@ -449,32 +593,39 @@ export default function App() {
   // Statistics calculation for user session logs
   const totalTasksSaved = sessions.length * 3;
   const completedTaskCount = sessions.reduce((acc, sess) => {
-    return acc + sess.micro_steps.filter(s => s.completed).length;
+    return acc + sess.micro_steps.filter((s) => s.completed).length;
   }, 0);
 
-  const activeEmotionStyling = activeAnalysis 
-    ? getEmotionStyling(activeAnalysis.detected_emotion) 
+  const activeEmotionStyling = activeAnalysis
+    ? getEmotionStyling(activeAnalysis.detected_emotion)
     : getEmotionStyling("default");
 
   return (
     <div className="min-h-screen bg-[#F9F7F2] text-[#3A3A3A] flex flex-col antialiased selection:bg-[#8DAA91]/20 selection:text-[#4A5D4D]">
-      
       {/* HEADER BAR */}
       <header className="border-b border-[#E5E0D5] bg-[#F2EDE4]/80 backdrop-blur-md sticky top-0 z-40 transition-all duration-300 px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-[#8DAA91] flex items-center justify-center shadow-sm">
+            <div
+              className="h-10 w-10 rounded-full bg-[#8DAA91] flex items-center justify-center shadow-sm relative group cursor-pointer"
+              onClick={() => setShowDashboard(true)}
+            >
               <Brain className="h-5 w-5 text-white" id="app-logo" />
+              {/* Mini plant progress circle over logo */}
+              <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-white border border-[#E5E0D5] flex items-center justify-center overflow-hidden">
+                <span className="text-[9px] font-bold text-[#8DAA91]">
+                  {plant.level}
+                </span>
+              </div>
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold font-display tracking-tight text-[#4A5D4D]">
                   MindStep <span className="text-[#8DAA91]">AI</span>
                 </h1>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F2EDE4] text-[#8B8374] border border-[#E5E0D5]">
-                  v1.2 GenZ-Wellbeing
-                </span>
+                <div className="flex items-center gap-1 text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#F2EDE4] text-[#8DAA91] border border-[#E5E0D5]">
+                  <Sprout className="h-2.5 w-2.5" /> Lvl {plant.level}
+                </div>
               </div>
               <p className="text-xs text-[#7A7469] font-sans">
                 Asisten Produktivitas Mikro & Pelipur Stres Anak Muda
@@ -482,26 +633,40 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-xs font-mono text-[#7A7469]">
-            <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-[#E5E0D5]">
-              <span className="h-2 w-2 rounded-full bg-[#8DAA91] animate-pulse"></span>
-              <span>Mindfulness Offline Sync</span>
-            </div>
-            <div className="hidden sm:flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-[#E5E0D5] text-[#3A3A3A]">
+          <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono text-[#7A7469]">
+            <button
+              onClick={() => setShowGarden(true)}
+              className="flex items-center gap-2 bg-[#8DAA91] text-white px-4 py-2 rounded-full shadow-sm hover:bg-[#7ba081] transition-all"
+            >
+              <Sprout className="h-4 w-4" />
+              <span className="hidden sm:inline font-bold">My Garden</span>
+            </button>
+            <button
+              onClick={toggleDashboard}
+              className="flex items-center gap-2 bg-[#4A5D4D] text-white px-4 py-2 rounded-full shadow-sm hover:bg-[#3d4d3f] transition-all"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline font-bold">Insights</span>
+            </button>
+            <div className="hidden md:flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-[#E5E0D5] text-[#3A3A3A]">
               <Calendar className="h-3.5 w-3.5 text-[#8DAA91]" />
-              <span>{new Date().toLocaleDateString("id-ID", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              <span>
+                {new Date().toLocaleDateString("id-ID", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </span>
             </div>
           </div>
-
         </div>
       </header>
 
       {/* MAIN CONTAINER */}
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
         {/* LEFT COLUMN: EDITOR & INPUT COGNITIVE BRAIN-DUMP (cols 5) */}
         <div className="lg:col-span-5 flex flex-col gap-6">
-          
           {/* WELLBEING WELL-PREPARED INTRO / TIP */}
           <div className="bg-[#F2EDE4] border border-[#E5E0D5] p-5 rounded-[24px] relative overflow-hidden shadow-soft">
             <div className="absolute top-0 right-0 p-3 opacity-15 transform translate-x-2 -translate-y-2">
@@ -512,9 +677,14 @@ export default function App() {
                 <Sparkle className="h-4 w-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-[#4A5D4D] font-display uppercase tracking-wider">Anti Analysis Paralysis 🍃</h3>
+                <h3 className="text-sm font-bold text-[#4A5D4D] font-display uppercase tracking-wider">
+                  Anti Analysis Paralysis 🍃
+                </h3>
                 <p className="text-xs text-[#7A7469] mt-1.5 leading-relaxed">
-                  Lagi hectic, overwhelmed, atau dead-end? Tulis atau ucapkan semua pikiran berantakan kamu di bawah. Kita dekap emosinya dan racik 3 langkah super enteng biar kamu bisa start tanpa drama!
+                  Lagi hectic, overwhelmed, atau dead-end? Tulis atau ucapkan
+                  semua pikiran berantakan kamu di bawah. Kita dekap emosinya
+                  dan racik 3 langkah super enteng biar kamu bisa start tanpa
+                  drama!
                 </p>
               </div>
             </div>
@@ -522,7 +692,6 @@ export default function App() {
 
           {/* INPUT FORM: THE BRAIN ZONE */}
           <div className="bg-white border border-[#E5E0D5] rounded-[32px] p-6 flex flex-col gap-4 relative shadow-soft">
-            
             {/* Persona Selector (Adapt AI talking style & context) */}
             <div className="flex flex-col gap-1.5 border border-[#E5E0D5] rounded-2xl bg-[#F9F7F2]/50 p-3.5">
               <div className="flex justify-between items-center">
@@ -548,7 +717,9 @@ export default function App() {
                   }`}
                 >
                   <span className="font-bold">Generasi Z</span>
-                  <span className="text-[9px] opacity-80 font-normal">Jaksel, Kasual, Empatik</span>
+                  <span className="text-[9px] opacity-80 font-normal">
+                    Jaksel, Kasual, Empatik
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -563,7 +734,9 @@ export default function App() {
                   }`}
                 >
                   <span className="font-bold font-sans">Profesional</span>
-                  <span className="text-[9px] opacity-80 font-normal">Sopan, Baku, Dewasa</span>
+                  <span className="text-[9px] opacity-80 font-normal">
+                    Sopan, Baku, Dewasa
+                  </span>
                 </button>
               </div>
             </div>
@@ -575,10 +748,10 @@ export default function App() {
                   <Layers className="h-4 w-4 text-[#8DAA91]" />
                   Active Brain-Dump
                 </span>
-                
+
                 {/* Clear and template triggers */}
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     onClick={loadDemoPreset}
                     className="text-[10px] font-mono text-[#8DAA91] hover:text-[#4A5D4D] transition-colors bg-[#F2EDE4] border border-[#E5E0D5] px-2.5 py-1 rounded-full text-xs font-semibold"
                     title="Load specific Chapter 2 Overthinking prompt"
@@ -586,7 +759,7 @@ export default function App() {
                     🚀 Pakai Curhatan Demo
                   </button>
                   {curhatan && (
-                    <button 
+                    <button
                       onClick={clearEditor}
                       className="text-[10px] text-[#8B8374] hover:text-[#3A3A3A] transition-colors flex items-center gap-0.5"
                     >
@@ -603,7 +776,7 @@ export default function App() {
                   <p className="text-xs text-[#7A7469] font-mono flex-grow truncate">
                     {speechFeedback}
                   </p>
-                  <button 
+                  <button
                     onClick={() => recognitionRef.current?.stop()}
                     className="text-[10px] text-[#8B8374] hover:text-red-500 transition-colors"
                   >
@@ -666,6 +839,23 @@ export default function App() {
             </button>
           </div>
 
+          {/* LEVEL UP POPUP */}
+          {showPlantPopup && (
+            <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] bg-[#4A5D4D] text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-4 animate-bounce border-2 border-white/20">
+              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
+                <Sparkles className="h-6 w-6 text-yellow-300" />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest leading-none">
+                  Level Up!
+                </p>
+                <p className="text-sm font-display italic">
+                  Taman mentalmu berevolusi ke Level {plant.level}!
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* WELLBEING METRICS DIARY (cols 5 bottom) */}
           <div className="bg-white border border-[#E5E0D5] rounded-[32px] p-6 flex flex-col gap-4 shadow-soft">
             <div className="flex items-center justify-between">
@@ -681,21 +871,31 @@ export default function App() {
             {/* Quick stats grid */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-[#F9F7F2] border border-[#E5E0D5] p-3 rounded-2xl text-center">
-                <span className="text-xs text-[#7A7469] block font-sans">Curhat</span>
+                <span className="text-xs text-[#7A7469] block font-sans">
+                  Curhat
+                </span>
                 <span className="text-lg font-bold font-display text-[#4A5D4D] mt-1 block">
                   {sessions.length}
                 </span>
               </div>
               <div className="bg-[#F9F7F2] border border-[#E5E0D5] p-3 rounded-2xl text-center">
-                <span className="text-xs text-[#7A7469] block font-sans">Mikro Aksi</span>
+                <span className="text-xs text-[#7A7469] block font-sans">
+                  Mikro Aksi
+                </span>
                 <span className="text-lg font-bold font-display text-[#8DAA91] mt-1 block">
                   {completedTaskCount}/{totalTasksSaved}
                 </span>
               </div>
               <div className="bg-[#F9F7F2] border border-[#E5E0D5] p-3 rounded-2xl text-center">
-                <span className="text-xs text-[#7A7469] block font-sans">Streak Day</span>
+                <span className="text-xs text-[#7A7469] block font-sans">
+                  Streak Day
+                </span>
                 <span className="text-lg font-bold font-display text-[#D9AE94] mt-1 block flex items-center justify-center gap-0.5">
-                  <Flame className="h-4 w-4 text-[#D9AE94] inline-block" /> {sessions.length > 0 ? "4" : "0"}
+                  <Flame className="h-4 w-4 text-[#D9AE94] inline-block" />{" "}
+                  {sessions.length > 0
+                    ? new Set(sessions.map((s) => s.timestamp.split("T")[0]))
+                        .size
+                    : "0"}
                 </span>
               </div>
             </div>
@@ -704,8 +904,12 @@ export default function App() {
             <div className="flex flex-col gap-2 max-h-[190px] overflow-y-auto pr-1">
               {sessions.length === 0 ? (
                 <div className="text-center py-6 border border-dashed border-[#E5E0D5] rounded-xl">
-                  <p className="text-xs text-[#7A7469]">Belum ada riwayat curhatan kamu.</p>
-                  <p className="text-[11px] text-[#8B8374] mt-0.5">Gunakan curhatan demo di atas untuk memulai!</p>
+                  <p className="text-xs text-[#7A7469]">
+                    Belum ada riwayat curhatan kamu.
+                  </p>
+                  <p className="text-[11px] text-[#8B8374] mt-0.5">
+                    Gunakan curhatan demo di atas untuk memulai!
+                  </p>
                 </div>
               ) : (
                 sessions.map((sess) => {
@@ -722,11 +926,16 @@ export default function App() {
                     >
                       <div className="flex-grow truncate pr-3">
                         <div className="flex items-center gap-2 mb-1 text-[11px]">
-                          <span className={`px-1.5 py-0.5 rounded font-mono font-medium text-[9px] ${itemStyle.pill}`}>
+                          <span
+                            className={`px-1.5 py-0.5 rounded font-mono font-medium text-[9px] ${itemStyle.pill}`}
+                          >
                             {sess.detected_emotion}
                           </span>
                           <span className="text-[#8B8374] font-mono text-[9px]">
-                            {new Date(sess.timestamp).toLocaleTimeString("id-ID", { hour: "numeric", minute: "2-digit" })}
+                            {new Date(sess.timestamp).toLocaleTimeString(
+                              "id-ID",
+                              { hour: "numeric", minute: "2-digit" },
+                            )}
                           </span>
                         </div>
                         <p className="text-xs text-[#3A3A3A] leading-relaxed truncate">
@@ -747,23 +956,28 @@ export default function App() {
               )}
             </div>
           </div>
-
         </div>
 
         {/* RIGHT COLUMN: MINDSTEP INIGHTS & DECONGESTED ACTIONS (cols 7) */}
         <div className="lg:col-span-7 flex flex-col gap-6">
-          
           {/* TIMER COMPONENT WIDGET */}
           {timerSeconds > 0 && (
             <div className="bg-[#D9AE94] text-white border border-[#D9AE94]/50 rounded-[24px] p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md animate-fadeIn">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-white/20 text-white flex items-center justify-center">
-                  <Clock className={`h-5 w-5 ${timerActive ? "animate-[spin_4s_linear_infinite]" : ""}`} />
+                  <Clock
+                    className={`h-5 w-5 ${timerActive ? "animate-[spin_4s_linear_infinite]" : ""}`}
+                  />
                 </div>
                 <div>
-                  <h4 className="text-xs text-white/90 font-mono font-bold uppercase tracking-wider">Focus & Flow Session Active</h4>
+                  <h4 className="text-xs text-white/90 font-mono font-bold uppercase tracking-wider">
+                    Focus & Flow Session Active
+                  </h4>
                   <p className="text-xs text-white/80 mt-0.5">
-                    Untangle: {activeAnalysis?.micro_steps.find(s => s.step_id === timerStepId)?.title || "Langkah Mikro"}
+                    Untangle:{" "}
+                    {activeAnalysis?.micro_steps.find(
+                      (s) => s.step_id === timerStepId,
+                    )?.title || "Langkah Mikro"}
                   </p>
                 </div>
               </div>
@@ -777,7 +991,11 @@ export default function App() {
                     onClick={() => setTimerActive(!timerActive)}
                     className="p-1.5 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors"
                   >
-                    {timerActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                    {timerActive ? (
+                      <Pause className="h-3.5 w-3.5" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5" />
+                    )}
                   </button>
                   <button
                     onClick={resetTimer}
@@ -803,9 +1021,13 @@ export default function App() {
                 <Brain className="h-8 w-8" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-[#4A5D4D] font-display uppercase tracking-wider">Belum Ada Analisis</h3>
+                <h3 className="text-base font-bold text-[#4A5D4D] font-display uppercase tracking-wider">
+                  Belum Ada Analisis
+                </h3>
                 <p className="text-xs text-[#7A7469] mt-1.5 max-w-sm mx-auto leading-relaxed">
-                  MindStep AI siap dengerin keluh kesah kamu. Pakai "Curhatan Demo" atau ketik langsung stres kamu di editor kiri, lalu klik analisis.
+                  MindStep AI siap dengerin keluh kesah kamu. Pakai "Curhatan
+                  Demo" atau ketik langsung stres kamu di editor kiri, lalu klik
+                  analisis.
                 </p>
               </div>
               <button
@@ -818,10 +1040,8 @@ export default function App() {
             </div>
           ) : (
             <div className="flex flex-col gap-6 flex-grow font-sans">
-              
               {/* EMPATHY INSIGHTS CARD */}
               <div className="bg-white rounded-[40px] p-8 md:p-10 shadow-soft border border-[#E5E0D5] flex flex-col gap-6 relative overflow-hidden">
-                
                 {/* Decorative natural flora motif background effect */}
                 <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                   <Brain className="h-32 w-32 text-[#8DAA91]" />
@@ -831,11 +1051,15 @@ export default function App() {
                   <span className="px-3.5 py-1 bg-[#F2EDE4] rounded-full text-xs font-bold uppercase tracking-widest text-[#8B8374] border border-[#E5E0D5]/40">
                     Detected: {activeAnalysis.detected_emotion}
                   </span>
-                  <span className={`px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-widest border ${
-                    activeAnalysis.energy_level_required.toLowerCase().includes("low")
-                      ? "bg-[#8DAA91]/10 text-[#4A5D4D] border-[#8DAA91]/30"
-                      : "bg-[#D9AE94]/10 text-[#D9AE94] border-[#D9AE94]/30"
-                  }`}>
+                  <span
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-widest border ${
+                      activeAnalysis.energy_level_required
+                        .toLowerCase()
+                        .includes("low")
+                        ? "bg-[#8DAA91]/10 text-[#4A5D4D] border-[#8DAA91]/30"
+                        : "bg-[#D9AE94]/10 text-[#D9AE94] border-[#D9AE94]/30"
+                    }`}
+                  >
                     Energy: {activeAnalysis.energy_level_required}
                   </span>
                 </div>
@@ -847,7 +1071,7 @@ export default function App() {
                       "{activeAnalysis.empathy_response}"
                     </h1>
                   </div>
-                  
+
                   <button
                     onClick={() => handleSpeak(activeAnalysis.empathy_response)}
                     className={`h-11 w-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all shadow-sm ${
@@ -855,7 +1079,11 @@ export default function App() {
                         ? "bg-[#8DAA91] text-white animate-pulse"
                         : "bg-[#F2EDE4] text-[#4A5D4D] hover:bg-[#E5E0D5] hover:text-[#3A3A3A]"
                     }`}
-                    title={isSpeaking ? "Hentikan Suara" : "Simak Respons dengan Audio (Empati-TTS)"}
+                    title={
+                      isSpeaking
+                        ? "Hentikan Suara"
+                        : "Simak Respons dengan Audio (Empati-TTS)"
+                    }
                   >
                     <Volume2 className="h-5 w-5" />
                   </button>
@@ -868,9 +1096,11 @@ export default function App() {
                     <div className="w-6 h-6 rounded-full border border-white bg-[#D9AE94]"></div>
                     <div className="w-6 h-6 rounded-full border border-white bg-[#8DAA91]"></div>
                   </div>
-                  <p className="italic">Ratusan Generasi Z menceritakan kecemasan setara siang ini. Your feelings are completely valid.</p>
+                  <p className="italic">
+                    Ratusan Generasi Z menceritakan kecemasan setara siang ini.
+                    Your feelings are completely valid.
+                  </p>
                 </div>
-
               </div>
 
               {/* THREE MICRO ACTIONS ROADMAP */}
@@ -881,7 +1111,8 @@ export default function App() {
                       Productivity Micro-Steps
                     </h3>
                     <p className="text-xs text-[#7A7469] mt-0.5">
-                      Selesaikan aksi super enteng ini biar nggak burnout demi progress-mu.
+                      Selesaikan aksi super enteng ini biar nggak burnout demi
+                      progress-mu.
                     </p>
                   </div>
                   <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#8DAA91] bg-[#F2EDE4] px-2.5 py-1 rounded-full border border-[#E5E0D5]">
@@ -892,7 +1123,8 @@ export default function App() {
                 <div className="flex flex-col gap-4">
                   {activeAnalysis.micro_steps.map((step) => {
                     const isStepDone = completedSteps[step.step_id];
-                    const isFirstStepAndNotDone = step.step_id === 1 && !isStepDone;
+                    const isFirstStepAndNotDone =
+                      step.step_id === 1 && !isStepDone;
                     return (
                       <div
                         key={step.step_id}
@@ -905,7 +1137,6 @@ export default function App() {
                         }`}
                       >
                         <div className="flex items-start gap-4">
-                          
                           {/* Gamified Checkbox */}
                           <button
                             type="button"
@@ -927,12 +1158,16 @@ export default function App() {
 
                           <div className="flex-grow">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <h4 className={`font-bold transition-all ${
-                                isStepDone ? "text-[#7A7469] line-through font-medium" : "text-[#4A5D4D]"
-                              }`}>
+                              <h4
+                                className={`font-bold transition-all ${
+                                  isStepDone
+                                    ? "text-[#7A7469] line-through font-medium"
+                                    : "text-[#4A5D4D]"
+                                }`}
+                              >
                                 {step.title}
                               </h4>
-                              
+
                               <div className="flex items-center gap-2">
                                 <span className="text-[11px] font-mono text-[#7A7469] flex items-center gap-1 bg-[#F2EDE4] px-2 py-0.5 rounded-full border border-[#E5E0D5]/50">
                                   <Clock className="h-3 w-3 text-[#8DAA91]" />
@@ -941,7 +1176,12 @@ export default function App() {
 
                                 {!isStepDone && (
                                   <button
-                                    onClick={() => startTimer(step.step_id, step.duration_minutes)}
+                                    onClick={() =>
+                                      startTimer(
+                                        step.step_id,
+                                        step.duration_minutes,
+                                      )
+                                    }
                                     className="text-[10px] font-mono text-[#D9AE94] hover:text-[#cb9d81] bg-[#F2EDE4] px-2.5 py-0.5 rounded-full border border-[#E5E0D5] flex items-center gap-0.5 transition-all font-bold"
                                     title="Mulai Sesi Fokus Mikro sekarang"
                                   >
@@ -950,12 +1190,11 @@ export default function App() {
                                 )}
                               </div>
                             </div>
-                            
+
                             <p className="text-sm text-[#7A7469] mt-2 leading-relaxed">
                               {step.description}
                             </p>
                           </div>
-
                         </div>
                       </div>
                     );
@@ -963,25 +1202,32 @@ export default function App() {
                 </div>
 
                 <div className="text-[11px] font-sans text-[#8B8374] flex items-center gap-1.5 justify-center mt-2 font-medium">
-                  <span>✨ Tips: Mulai dari Langkah Pertama. Gak usah mikirin bab-bab selanjutnya dulu ya.</span>
+                  <span>
+                    ✨ Tips: Mulai dari Langkah Pertama. Gak usah mikirin
+                    bab-bab selanjutnya dulu ya.
+                  </span>
                 </div>
-
               </div>
-
             </div>
           )}
 
           {/* WELLBEING WELL-MOTIVATION ZONE */}
           <div className="mt-auto bg-[#D9AE94] rounded-[32px] p-6 text-white flex flex-col sm:flex-row gap-4 justify-between items-center shadow-soft">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest opacity-85">Kesehatan mental lu nomor satu ☕️</p>
-              <p className="text-lg font-serif italic mt-0.5">Let's lower the pressure step by step.</p>
+              <p className="text-xs font-bold uppercase tracking-widest opacity-85">
+                Kesehatan mental lu nomor satu ☕️
+              </p>
+              <p className="text-lg font-serif italic mt-0.5">
+                Let's lower the pressure step by step.
+              </p>
             </div>
-            <button 
+            <button
               onClick={() => {
                 // If there's an active analysis, complete the first steps
                 if (activeAnalysis) {
-                  const firstNotCompleted = activeAnalysis.micro_steps.find(s => !completedSteps[s.step_id]);
+                  const firstNotCompleted = activeAnalysis.micro_steps.find(
+                    (s) => !completedSteps[s.step_id],
+                  );
                   if (firstNotCompleted) {
                     toggleStepCompleted(firstNotCompleted.step_id);
                   }
@@ -994,9 +1240,7 @@ export default function App() {
               {activeAnalysis ? "I'm Doing It" : "Mulai Sekarang"}
             </button>
           </div>
-
         </div>
-
       </main>
 
       {/* FOOTER */}
@@ -1011,6 +1255,278 @@ export default function App() {
         </div>
       </footer>
 
+      {/* DASHBOARD MODAL */}
+      {showDashboard && (
+        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#F9F7F2] border border-[#E5E0D5] w-full max-w-2xl rounded-[40px] p-6 md:p-10 shadow-2xl relative overflow-hidden flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fadeIn">
+            <button
+              onClick={() => setShowDashboard(false)}
+              className="absolute top-6 right-6 h-10 w-10 rounded-full bg-white border border-[#E5E0D5] flex items-center justify-center text-[#8B8374] hover:text-[#3A3A3A] transition-all z-10"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex flex-col gap-1">
+              <h2 className="text-2xl font-bold font-display text-[#4A5D4D] flex items-center gap-3">
+                <TrendingUp className="h-6 w-6 text-[#8DAA91]" />
+                Emotional Insights Dashboard
+              </h2>
+              <p className="text-xs text-[#7A7469]">
+                Tracking perjalanan mental kamu minggu ini.
+              </p>
+            </div>
+
+            {isStatsLoading ? (
+              <div className="py-20 flex flex-col items-center justify-center gap-4">
+                <Loader2 className="h-10 w-10 animate-spin text-[#8DAA91]" />
+                <p className="text-sm font-mono text-[#8B8374]">
+                  Mengkalkulasi data emosi kamu...
+                </p>
+              </div>
+            ) : stats ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4">
+                {/* Distributions Column */}
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#8DAA91]">
+                    Top Emotions
+                  </h3>
+                  <div className="bg-white border border-[#E5E0D5] p-5 rounded-3xl flex flex-col gap-4 shadow-sm">
+                    {stats.top_emotions?.length > 0 ? (
+                      stats.top_emotions.map((em: any, idx: number) => {
+                        const colors = [
+                          "bg-[#8DAA91]",
+                          "bg-[#D9AE94]",
+                          "bg-[#4A5D4D]",
+                          "bg-[#8DAA91]/70",
+                          "bg-[#D9AE94]/70",
+                        ];
+                        const percent = Math.min(
+                          100,
+                          (em.count / stats.total_curhatan) * 100,
+                        );
+                        return (
+                          <div key={idx} className="flex flex-col gap-1.5">
+                            <div className="flex justify-between text-xs font-bold text-[#4A5D4D]">
+                              <span>{em.label}</span>
+                              <span className="font-mono">{em.count}</span>
+                            </div>
+                            <div className="h-2 w-full bg-[#F2EDE4] rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${colors[idx % colors.length]} rounded-full transition-all duration-1000`}
+                                style={{ width: `${percent}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-[#8B8374] py-10 text-center italic">
+                        Belum ada data emosi terkumpul.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-[#4A5D4D] p-5 rounded-3xl text-white flex items-center justify-between shadow-md">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold opacity-70">
+                        Total Analysis
+                      </p>
+                      <p className="text-3xl font-display font-bold">
+                        {stats.total_curhatan}
+                      </p>
+                    </div>
+                    <Activity className="h-10 w-10 opacity-20" />
+                  </div>
+                </div>
+
+                {/* Activity Graph Column */}
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#8DAA91]">
+                    Activity (Last 7 Days)
+                  </h3>
+                  <div className="bg-white border border-[#E5E0D5] p-5 rounded-3xl flex-grow shadow-sm flex flex-col">
+                    <div className="flex-grow flex items-end justify-between gap-2 h-40 pt-4">
+                      {[...Array(7)].map((_, i) => {
+                        const date = new Date();
+                        date.setDate(date.getDate() - (6 - i));
+                        const dateStr = date.toISOString().split("T")[0];
+                        const dayData = stats.weekly_activity?.find(
+                          (d: any) => d.date === dateStr,
+                        );
+                        const height = dayData
+                          ? Math.min(100, (dayData.count / 5) * 100)
+                          : 5;
+
+                        return (
+                          <div
+                            key={i}
+                            className="flex flex-col items-center gap-2 flex-1"
+                          >
+                            <div className="w-full relative group">
+                              <div
+                                className={`w-full rounded-t-lg transition-all duration-700 ${dayData ? "bg-[#8DAA91]" : "bg-[#F2EDE4]"}`}
+                                style={{
+                                  height: `${height}%`,
+                                  minHeight: "8px",
+                                }}
+                              ></div>
+                              {dayData && (
+                                <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold bg-[#4A5D4D] text-white px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {dayData.count}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[9px] font-mono text-[#8B8374] uppercase">
+                              {date.toLocaleDateString("id-ID", {
+                                weekday: "short",
+                              })}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-[#8B8374] mt-4 italic text-center underline decoration-[#8DAA91]/30">
+                      Grafik menunjukkan intensitas curhatan harian kamu.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-center py-20 text-[#8B8374]">
+                Gagal memuat statistik.
+              </p>
+            )}
+
+            <div className="bg-[#D9AE94]/10 border border-[#D9AE94]/30 p-4 rounded-2xl flex items-start gap-3">
+              <Heart className="h-5 w-5 text-[#D9AE94] shrink-0" />
+              <p className="text-[11px] text-[#7A7469] leading-relaxed">
+                <strong>MindStep Note:</strong> Dashboard ini bantu kamu sadar
+                pola emosi kamu. Ingat, *it's okay not to be okay*. Setiap
+                progress kecil tetaplah progress!
+              </p>
+            </div>
+
+            <div className="mt-4 pt-6 border-t border-[#E5E0D5] flex flex-col gap-3">
+              <h4 className="text-[10px] font-bold uppercase tracking-widest text-red-400">
+                Danger Zone
+              </h4>
+              <button
+                onClick={handleResetApp}
+                className="w-full py-3 border border-red-100 bg-red-50/30 hover:bg-red-50 text-red-500 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                Hapus Semua Data & Mulai dari Awal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MENTAL GARDEN MODAL */}
+      {showGarden && (
+        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#F2EDE4] border border-[#E5E0D5] w-full max-w-xl rounded-[40px] p-8 md:p-12 shadow-2xl relative overflow-hidden flex flex-col items-center text-center gap-8 animate-fadeIn">
+            {/* Background elements */}
+            <div className="absolute top-10 right-10 opacity-10 animate-pulse">
+              <Wind className="h-20 w-20 text-[#8DAA91]" />
+            </div>
+            <div className="absolute bottom-10 left-10 opacity-10 rotate-180">
+              <Wind className="h-16 w-16 text-[#8DAA91]" />
+            </div>
+
+            <button
+              onClick={() => setShowGarden(false)}
+              className="absolute top-8 right-8 h-10 w-10 rounded-full bg-white border border-[#E5E0D5] flex items-center justify-center text-[#8B8374] hover:text-[#3A3A3A] transition-all z-10"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex flex-col gap-2">
+              <h2 className="text-3xl font-bold font-display text-[#4A5D4D] flex items-center justify-center gap-3">
+                <Sprout className="h-8 w-8 text-[#8DAA91]" />
+                Your Mental Garden
+              </h2>
+              <p className="text-sm text-[#7A7469]">
+                Ruang tenang untuk melihat sejauh mana kamu telah bertumbuh.
+              </p>
+            </div>
+
+            {/* MAIN PLANT VISUAL */}
+            <div className="relative py-10 w-full flex flex-col items-center">
+              <div className="h-48 w-48 rounded-full bg-white/40 border border-white flex items-center justify-center relative shadow-inner">
+                {/* Decorative Glow */}
+                <div className="absolute inset-0 bg-[#8DAA91]/10 rounded-full animate-pulse blur-xl"></div>
+
+                {plant.level === 1 && (
+                  <Sprout
+                    className="h-24 w-24 text-[#8DAA91] animate-bounce z-10"
+                    style={{ animationDuration: "4s" }}
+                  />
+                )}
+                {plant.level === 2 && (
+                  <Flower2
+                    className="h-24 w-24 text-[#D9AE94] animate-bounce z-10"
+                    style={{ animationDuration: "4s" }}
+                  />
+                )}
+                {plant.level >= 3 && (
+                  <TreePine
+                    className="h-28 w-28 text-[#4A5D4D] animate-bounce z-10"
+                    style={{ animationDuration: "4s" }}
+                  />
+                )}
+              </div>
+
+              {/* Ground Shadow */}
+              <div className="h-4 w-32 bg-[#3A3A3A]/5 rounded-full mt-4 blur-sm"></div>
+
+              <div className="mt-8 flex flex-col items-center gap-1">
+                <div className="bg-[#4A5D4D] text-white px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-md">
+                  Level {plant.level}
+                </div>
+                <p className="text-xs text-[#7A7469] mt-2 font-mono">
+                  Total XP: {plant.xp}
+                </p>
+              </div>
+            </div>
+
+            <div className="w-full max-w-sm flex flex-col gap-4">
+              <div className="flex justify-between items-end px-1">
+                <span className="text-xs font-bold text-[#4A5D4D] uppercase tracking-wider">
+                  Evolution Progress
+                </span>
+                <span className="text-xs font-mono font-bold text-[#8DAA91]">
+                  {plant.xp % 100}%
+                </span>
+              </div>
+              <div className="h-4 w-full bg-white rounded-full overflow-hidden border border-[#E5E0D5] p-1">
+                <div
+                  className="h-full bg-gradient-to-r from-[#8DAA91] via-[#ADCB91] to-[#8DAA91] rounded-full transition-all duration-1000 ease-out bg-[length:200%_100%] animate-shimmer"
+                  style={{ width: `${plant.xp % 100}%` }}
+                ></div>
+              </div>
+              <p className="text-sm italic text-[#4A5D4D] font-medium leading-relaxed bg-white/50 p-4 rounded-3xl border border-white">
+                {plant.level === 1 &&
+                  "🌱 Kamu baru memulai perjalanan ini. Tetap ceritakan apa yang kamu rasakan, dan biarkan tunas ini tumbuh kuat."}
+                {plant.level === 2 &&
+                  "🌸 Cantik sekali! Tanamanmu mulai berbunga karena perhatian yang kamu berikan pada dirimu sendiri."}
+                {plant.level >= 3 &&
+                  "🌳 Luar biasa! Kamu telah membangun ketangguhan mental yang luar biasa. Teruslah bertumbuh!"}
+              </p>
+            </div>
+
+            <div className="text-[10px] uppercase font-mono text-[#8B8374] tracking-widest mt-4">
+              ✨ Dirawat sejak{" "}
+              {sessions.length > 0
+                ? new Date(
+                    sessions[sessions.length - 1].timestamp,
+                  ).toLocaleDateString()
+                : "hari ini"}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ONBOARDING PERSONA SELECTION MODAL */}
       {showPersonaModal && (
         <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 backdrop-blur-md flex items-center justify-center p-4">
@@ -1018,14 +1534,17 @@ export default function App() {
             <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
               <Brain className="h-24 w-24 text-[#8DAA91]" />
             </div>
-            
+
             <div className="text-center animate-fadeIn">
               <div className="h-12 w-12 rounded-full bg-[#8DAA91]/15 text-[#8DAA91] mx-auto flex items-center justify-center mb-4">
                 <Brain className="h-6 w-6" id="welcome-logo" />
               </div>
-              <h2 className="text-xl font-bold font-display text-[#4A5D4D]">Selamat datang di MindStep AI! 👋</h2>
+              <h2 className="text-xl font-bold font-display text-[#4A5D4D]">
+                Selamat datang di MindStep AI! 👋
+              </h2>
               <p className="text-xs text-[#7A7469] mt-2 leading-relaxed">
-                Asisten produktivitas mikro & wellbeing kamu. Yuk, tentukan profil kamu untuk menyesuaikan gaya bahasa AI pas kamu masuk!
+                Asisten produktivitas mikro & wellbeing kamu. Yuk, tentukan
+                profil kamu untuk menyesuaikan gaya bahasa AI pas kamu masuk!
               </p>
             </div>
 
@@ -1043,9 +1562,13 @@ export default function App() {
                   Z
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-[#4A5D4D] group-hover:text-[#8DAA91] transition-all">Generasi Z (Jaksel style)</h4>
+                  <h4 className="font-bold text-sm text-[#4A5D4D] group-hover:text-[#8DAA91] transition-all">
+                    Generasi Z (Jaksel style)
+                  </h4>
                   <p className="text-xs text-[#7A7469] mt-1 leading-relaxed">
-                    Pendekatan kasual, penuh istilah Inggris populer ("overwhelmed", "burnout"). Hangat & supel bak sahabat karib sebaya.
+                    Pendekatan kasual, penuh istilah Inggris populer
+                    ("overwhelmed", "burnout"). Hangat & supel bak sahabat karib
+                    sebaya.
                   </p>
                 </div>
               </button>
@@ -1063,9 +1586,13 @@ export default function App() {
                   P
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-[#4A5D4D] group-hover:text-[#4A5D4D] transition-all font-sans">Profesional / Umum</h4>
+                  <h4 className="font-bold text-sm text-[#4A5D4D] group-hover:text-[#4A5D4D] transition-all font-sans">
+                    Profesional / Umum
+                  </h4>
                   <p className="text-xs text-[#7A7469] mt-1 leading-relaxed">
-                    Gaya bahasa yang dewasa, santun, sopan, dan terstruktur dengan Bahasa Indonesia yang baku namun tetap penuh kehangatan serta empati.
+                    Gaya bahasa yang dewasa, santun, sopan, dan terstruktur
+                    dengan Bahasa Indonesia yang baku namun tetap penuh
+                    kehangatan serta empati.
                   </p>
                 </div>
               </button>
@@ -1073,7 +1600,6 @@ export default function App() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

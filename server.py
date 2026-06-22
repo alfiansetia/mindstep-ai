@@ -21,16 +21,45 @@ def init_db():
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+        # Tabel untuk Semantic Cache
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS semantic_cache (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             curhatan TEXT UNIQUE,
-            embedding TEXT, -- Vektor embedding yang disimpan sebagai JSON Array
-            response TEXT,  -- Respons terstruktur (AnalysisResponse) sebagai JSON String
+            embedding TEXT,
+            response TEXT,
             persona TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
+        # Tabel BARU untuk Tracking Emosi & Aktivitas (Long-term)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            emotion TEXT,
+            energy_level TEXT,
+            curhatan_summary TEXT,
+            session_id TEXT,
+            created_at DATE DEFAULT (DATE('now'))
+        )
+        """)
+        # Tambahkan kolom session_id jika belum ada (Backward compatibility)
+        cursor.execute("PRAGMA table_info(user_activity)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if "session_id" not in columns:
+            cursor.execute("ALTER TABLE user_activity ADD COLUMN session_id TEXT")
+        # Tabel untuk Mental Garden
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS plant_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            level INTEGER DEFAULT 1,
+            xp INTEGER DEFAULT 0,
+            plant_type TEXT DEFAULT 'succulent'
+        )
+        """)
+        # Masukkan baris pertama jika kosong
+        cursor.execute("INSERT OR IGNORE INTO plant_stats (id, level, xp) VALUES (1, 1, 0)")
+        
         conn.commit()
         conn.close()
     except Exception as e:
@@ -65,9 +94,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 # Naikkan via .env jika masih sering 503: OLLAMA_TIMEOUT=300
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
 
-# Konfigurasi Semantic Cache
+# Konfigurasi Semantic Cache (Diperketat agar emosi lebih akurat)
 SEMANTIC_CACHE_ENABLED = os.getenv("SEMANTIC_CACHE_ENABLED", "true").lower() == "true"
-SEMANTIC_CACHE_THRESHOLD = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.88"))
+SEMANTIC_CACHE_THRESHOLD = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.95"))
 
 def get_embedding(text: str) -> List[float]:
     """Menghitung vektor embedding dari suatu teks menggunakan endpoint /api/embed Ollama (versi terbaru)."""
@@ -155,6 +184,35 @@ def save_semantic_cache(curhatan: str, embedding: List[float], response_data: di
     except Exception as e:
         print(f"Error saving to semantic cache: {e}")
 
+def save_user_activity(emotion: str, energy_level: str, curhatan: str, session_id: str = None):
+    """Mencatatkan histori emosi pengguna untuk keperluan statistik dashboard."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        # Simpan ringkasan curhatan (ambil 50 karakter pertama)
+        summary = (curhatan[:47] + '..') if len(curhatan) > 50 else curhatan
+        cursor.execute(
+            "INSERT INTO user_activity (emotion, energy_level, curhatan_summary, session_id) VALUES (?, ?, ?, ?)",
+            (emotion, energy_level, summary, session_id)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error saving to user activity: {e}")
+
+@app.delete("/api/session/{session_id}")
+def delete_session(session_id: str):
+    """Menghapus data aktivitas berdasarkan session_id."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM user_activity WHERE session_id = ?", (session_id,))
+        conn.commit()
+        conn.close()
+        return {"status": "deleted"}
+    except Exception as e:
+        return {"error": str(e), "status": "failed"}
+
 # Pydantic Schemas untuk menangani request dan response terstruktur
 class MicroStep(BaseModel):
     step_id: int
@@ -164,8 +222,8 @@ class MicroStep(BaseModel):
 
 class AnalysisRequest(BaseModel):
     curhatan: str
-    contextHistory: Optional[str] = None
     userPersona: Optional[str] = "genz"
+    sessionId: Optional[str] = None
 
 class AnalysisResponse(BaseModel):
     empathy_response: str
@@ -177,6 +235,86 @@ class AnalysisResponse(BaseModel):
 @app.get("/api/health")
 def health_check():
     return {"status": "ok", "engine": "FastAPI & Ollama Local"}
+
+@app.get("/api/stats")
+def get_stats():
+    """Mengambil statistik emosi untuk ditampilkan di dashboard."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # 1. Hitung distribusi emosi
+        cursor.execute("SELECT emotion, COUNT(*) FROM user_activity GROUP BY emotion ORDER BY COUNT(*) DESC LIMIT 5")
+        emotions = [{"label": row[0], "count": row[1]} for row in cursor.fetchall()]
+        
+        # 2. Hitung aktivitas 7 hari terakhir
+        cursor.execute("SELECT created_at, COUNT(*) FROM user_activity WHERE created_at > date('now', '-7 days') GROUP BY created_at")
+        activity = [{"date": row[0], "count": row[1]} for row in cursor.fetchall()]
+        
+        # 3. Total curhatan
+        cursor.execute("SELECT COUNT(*) FROM user_activity")
+        total = cursor.fetchone()[0]
+        
+        conn.close()
+        return {
+            "top_emotions": emotions,
+            "weekly_activity": activity,
+            "total_curhatan": total
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/plant")
+def get_plant():
+    """Mengambil status tanaman mental."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT level, xp, plant_type FROM plant_stats WHERE id = 1")
+        row = cursor.fetchone()
+        conn.close()
+        return {"level": row[0], "xp": row[1], "type": row[2]}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/plant/grow")
+def grow_plant(amount: int = 10):
+    """Menambah XP tanaman mental (misal 10 XP per tugas selesai)."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE plant_stats SET xp = xp + ? WHERE id = 1", (amount,))
+        
+        # Logika Level Up (tiap 100 XP naik level)
+        cursor.execute("SELECT xp, level FROM plant_stats WHERE id = 1")
+        xp, level = cursor.fetchone()
+        new_level = (xp // 100) + 1
+        if new_level > level:
+            cursor.execute("UPDATE plant_stats SET level = ? WHERE id = 1", (new_level,))
+            
+        conn.commit()
+        conn.close()
+        return {"status": "ok", "new_xp": xp + amount, "level": new_level}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/reset")
+def reset_all_data():
+    """Mereset seluruh data aplikasi (Aktivitas, Garden, & Semantic Cache)."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        # Kosongkan histori emosi
+        cursor.execute("DELETE FROM user_activity")
+        # Kosongkan Semantic Cache agar AI menganalisis ulang dari nol
+        cursor.execute("DELETE FROM semantic_cache")
+        # Reset Mental Garden
+        cursor.execute("UPDATE plant_stats SET level = 1, xp = 0 WHERE id = 1")
+        conn.commit()
+        conn.close()
+        return {"status": "success", "message": "Semua data termasuk cache memori AI berhasil dihapus."}
+    except Exception as e:
+        return {"error": str(e), "status": "failed"}
 
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
@@ -209,9 +347,11 @@ async def analyze_brain_dump(request: AnalysisRequest):
     else:
         system_instruction = (
             "Kamu adalah MindStep AI, bestie produktivitas Gen Z. "
-            "WAJIB: Gunakan Bahasa Indonesia sebagai bahasa UTAMA. DILARANG menjawab full dalam Bahasa Inggris. "
+            "WAJIB: Gunakan Bahasa Indonesia sebagai bahasa UTAMA. "
             "Gaya bahasa: Kasual Jaksel (dominan Indo + bumbu kata: jujurly, valid, healing, slay, pusing bgt, spill, anyway). "
-            "Tugasmu: urai stres jadi 3 langkah mikro (max 15 mnt) yang nyambung dan solutif. JANGAN SALIN CONTOH."
+            "FOKUS TUGAS: Hanya urai stres jadi 3 langkah mikro (max 15 mnt). "
+            "PEMBATASAN TOPIK: Tolak pertanyaan di luar manajemen stres/produktivitas (misal: rekomendasi makanan, berita, info umum). "
+            "CARA TOLAK: Tolak dengan empati ala sahabat, contoh: 'Aduh bestie, mending kita fokus beresin rasa pusing lo dulu yuk, topik itu spill nanti aja kalau lo udah chill'."
         )
 
     # 2. Rancang Prompt agar Output Ollama tervalidasi dalam Format JSON yang Konsisten
@@ -229,9 +369,6 @@ ISI JSON HARUS:
 - "detected_emotion": Emosi (misal: "Overwhelmed parah", "Burnout", "Dead-end").
 - "energy_level_required": "Rendah", "Sedang", atau "Tinggi".
 - "micro_steps": 3 langkah konkret dalam Bahasa Indonesia.
-
-Context History Pengguna:
-{request.contextHistory or "Tidak ada riwayat pembicaraan sebelumnya."}
 
 Curhatan Baru Pengguna:
 "{request.curhatan}"
@@ -285,6 +422,14 @@ Keluarkan balasan HANYA dalam struktur JSON bersih berikut (tanpa markdown, tanp
         # Simpan respons baru ke Semantic Cache
         if SEMANTIC_CACHE_ENABLED and embedding:
             save_semantic_cache(request.curhatan, embedding, parsed_data, persona)
+            
+        # Simpan ke histori aktivitas untuk Dashboard dengan session ID
+        save_user_activity(
+            parsed_data.get("detected_emotion", "Unknown"),
+            parsed_data.get("energy_level_required", "Rendah"),
+            request.curhatan,
+            request.sessionId
+        )
             
         return parsed_data
 
