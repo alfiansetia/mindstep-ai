@@ -92,10 +92,6 @@ export default function App() {
   // Diary & Quote States
   const [showDiary, setShowDiary] = useState<boolean>(false);
   const [diaryItems, setDiaryItems] = useState<any[]>([]);
-  const [dailyQuote, setDailyQuote] = useState<{
-    quote: string;
-    author: string;
-  } | null>(null);
 
   // History & Local Registry
   const [sessions, setSessions] = useState<HistorySession[]>([]);
@@ -114,32 +110,36 @@ export default function App() {
       setShowPersonaModal(true);
     }
 
-    const saved = localStorage.getItem("mindstep_sessions");
-    if (saved) {
+    const fetchSessions = async () => {
       try {
-        const parsed = JSON.parse(saved) as HistorySession[];
-        setSessions(parsed);
-        if (parsed.length > 0) {
-          // Preset the latest analysis in view
-          const latest = parsed[0];
-          setActiveSessionId(latest.id);
-          setActiveAnalysis({
-            empathy_response: latest.empathy_response,
-            detected_emotion: latest.detected_emotion,
-            energy_level_required: latest.energy_level_required,
-            micro_steps: latest.micro_steps,
-          });
-          // Restore completion state
-          const completions: Record<number, boolean> = {};
-          latest.micro_steps.forEach((step) => {
-            completions[step.step_id] = step.completed || false;
-          });
-          setCompletedSteps(completions);
+        const response = await fetch(`${API_BASE_URL}/api/sessions`);
+        if (response.ok) {
+          const parsed = (await response.json()) as HistorySession[];
+          setSessions(parsed);
+          if (parsed.length > 0) {
+            // Preset the latest analysis in view
+            const latest = parsed[0];
+            setActiveSessionId(latest.id);
+            setActiveAnalysis({
+              empathy_response: latest.empathy_response,
+              detected_emotion: latest.detected_emotion,
+              energy_level_required: latest.energy_level_required,
+              micro_steps: latest.micro_steps,
+            });
+            // Restore completion state
+            const completions: Record<number, boolean> = {};
+            latest.micro_steps.forEach((step) => {
+              completions[step.step_id] = step.completed || false;
+            });
+            setCompletedSteps(completions);
+          }
         }
       } catch (e) {
-        console.error("Error restoring history", e);
+        console.error("Error fetching sessions", e);
       }
-    }
+    };
+
+    fetchSessions();
 
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
@@ -196,20 +196,7 @@ export default function App() {
     // Fetch Initial Data
     fetchPlant();
     fetchStats();
-    fetchDailyQuote();
   }, []);
-
-  const fetchDailyQuote = async () => {
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/quote?persona=${userPersona}`,
-      );
-      const data = await res.json();
-      if (data.quote) setDailyQuote(data);
-    } catch (e) {
-      console.error("Failed to fetch quote", e);
-    }
-  };
 
   const fetchDiary = async () => {
     try {
@@ -252,10 +239,9 @@ export default function App() {
     }
   };
 
-  // Save Sessions helper
+  // Save Sessions helper - now only updates local state, actual persistence happens in BE
   const saveSessionsToLocal = (updatedSessions: HistorySession[]) => {
     setSessions(updatedSessions);
-    localStorage.setItem("mindstep_sessions", JSON.stringify(updatedSessions));
   };
 
   // Trigger Brain-dump Analysis via Server-Side API
@@ -285,27 +271,20 @@ export default function App() {
       const data: AnalysisResponse = await response.json();
       setActiveAnalysis(data);
 
+      // Refresh sessions from BE to get the newly created session
+      const sessRes = await fetch(`${API_BASE_URL}/api/sessions`);
+      if (sessRes.ok) {
+        const updatedSessions = await sessRes.json();
+        setSessions(updatedSessions);
+        setActiveSessionId(sessionId);
+      }
+
       // Check default checkmarks
       const stepCompletions: Record<number, boolean> = {};
       data.micro_steps.forEach((step) => {
         stepCompletions[step.step_id] = false;
       });
       setCompletedSteps(stepCompletions);
-
-      // Save into history
-      const newSession: HistorySession = {
-        id: sessionId,
-        timestamp: new Date().toISOString(),
-        original_curhatan: textToAnalyze,
-        empathy_response: data.empathy_response,
-        detected_emotion: data.detected_emotion,
-        energy_level_required: data.energy_level_required,
-        micro_steps: data.micro_steps,
-      };
-
-      const updated = [newSession, ...sessions];
-      saveSessionsToLocal(updated);
-      setActiveSessionId(newSession.id);
     } catch (error: any) {
       console.error(error);
       alert("Gagal memproses curhatan kamu. Silakan coba lagi sebentar!");
@@ -357,14 +336,12 @@ export default function App() {
       setCurhatan("");
       setPlant({ level: 1, xp: 0, type: "succulent" });
       setStats(null);
-      setDailyQuote(null); // Bersihkan quote lama
       setShowDashboard(false);
       setShowDiary(false);
 
       // Re-fetch untuk memastikan data default dari DB terambil
       fetchPlant();
       fetchStats();
-      fetchDailyQuote();
 
       // Show Persona Modal again
       setShowPersonaModal(true);
@@ -402,18 +379,27 @@ export default function App() {
       growPlant(20); // 20 XP per completed task
     }
 
-    // Update session record in stored history
+    // Update session record in stored history & Sync to BE
     if (activeSessionId) {
       const updatedSessions = sessions.map((sess) => {
         if (sess.id === activeSessionId) {
+          const updatedStepsInSess = sess.micro_steps.map((step) => {
+            if (step.step_id === stepId) {
+              return { ...step, completed: updatedCompletions[stepId] };
+            }
+            return step;
+          });
+
+          // Async sync to BE
+          fetch(`${API_BASE_URL}/api/sessions/${activeSessionId}/steps`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updatedStepsInSess),
+          }).catch((err) => console.error("Sync error", err));
+
           return {
             ...sess,
-            micro_steps: sess.micro_steps.map((step) => {
-              if (step.step_id === stepId) {
-                return { ...step, completed: updatedCompletions[stepId] };
-              }
-              return step;
-            }),
+            micro_steps: updatedStepsInSess,
           };
         }
         return sess;
@@ -1124,7 +1110,7 @@ export default function App() {
                 <div className="mt-2 flex items-start justify-between gap-6">
                   <div className="flex-grow">
                     <h1 className="text-3xl md:text-[38px] leading-[1.15] font-serif italic text-[#4A5D4D] tracking-tight">
-                      "{activeAnalysis.empathy_response}"
+                      {activeAnalysis.empathy_response}
                     </h1>
                   </div>
 
@@ -1716,7 +1702,7 @@ export default function App() {
                                 {item.emotion}
                               </h4>
                               <p className="text-xs text-[#7A7469] mt-2 leading-relaxed italic">
-                                "{item.summary}"
+                                {item.summary}
                               </p>
                             </div>
                             <div className="h-10 w-10 flex items-center justify-center rounded-2xl bg-[#F9F7F2] border border-[#E5E0D5] shrink-0">

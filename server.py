@@ -73,6 +73,19 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
+        # Tabel untuk menyimpan session lengkap (menggantikan localStorage)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            timestamp TEXT,
+            original_curhatan TEXT,
+            empathy_response TEXT,
+            detected_emotion TEXT,
+            energy_level_required TEXT,
+            micro_steps TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
         
         # Masukkan baris pertama jika kosong
         cursor.execute("INSERT OR IGNORE INTO plant_stats (id, level, xp) VALUES (1, 1, 0)")
@@ -206,13 +219,79 @@ def save_user_activity(emotion: str, energy_level: str, curhatan: str, session_i
     except Exception as e:
         print(f"Error saving to user activity: {e}")
 
+def save_session_to_db(session_id: str, timestamp: str, curhatan: str, response: dict):
+    """Menyimpan data session lengkap ke tabel sessions."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=30)
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT OR REPLACE INTO sessions 
+               (id, timestamp, original_curhatan, empathy_response, detected_emotion, energy_level_required, micro_steps) 
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                session_id,
+                timestamp,
+                curhatan,
+                response.get("empathy_response", ""),
+                response.get("detected_emotion", ""),
+                response.get("energy_level_required", ""),
+                json.dumps(response.get("micro_steps", []))
+            )
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error saving session to DB: {e}")
+
+@app.get("/api/sessions")
+def get_sessions(limit: int = 50):
+    """Mengambil riwayat session dari database."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=30)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, timestamp, original_curhatan, empathy_response, detected_emotion, energy_level_required, micro_steps FROM sessions ORDER BY timestamp DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        sessions = []
+        for r in rows:
+            sessions.append({
+                "id": r[0],
+                "timestamp": r[1],
+                "original_curhatan": r[2],
+                "empathy_response": r[3],
+                "detected_emotion": r[4],
+                "energy_level_required": r[5],
+                "micro_steps": json.loads(r[6])
+            })
+        return sessions
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.put("/api/sessions/{session_id}/steps")
+async def update_session_steps(session_id: str, steps: List[dict]):
+    """Update status micro_steps dalam suatu session."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=30)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE sessions SET micro_steps = ? WHERE id = ?",
+            (json.dumps(steps), session_id)
+        )
+        conn.commit()
+        conn.close()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.delete("/api/session/{session_id}")
 def delete_session(session_id: str):
-    """Menghapus data aktivitas berdasarkan session_id."""
+    """Menghapus data aktivitas & session berdasarkan session_id."""
     try:
         conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM user_activity WHERE session_id = ?", (session_id,))
+        cursor.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         conn.commit()
         conn.close()
         return {"status": "deleted"}
@@ -300,46 +379,8 @@ def get_detailed_history(limit: int = 20):
 
 @app.get("/api/quote")
 def get_daily_quote(persona: str = "genz"):
-    """Mengambil atau membuat quote penyemangat harian yang personal."""
-    from datetime import date
-    today_date = date.today().isoformat()
-    
-    try:
-        conn = sqlite3.connect(DB_PATH, timeout=30)
-        cursor = conn.cursor()
-        
-        # Cek apakah sudah ada quote buat hari ini
-        cursor.execute("SELECT quote, author FROM daily_quotes WHERE target_date = ?", (today_date,))
-        row = cursor.fetchone()
-        
-        if row:
-            conn.close()
-            return {"quote": row[0], "author": row[1]}
-        
-        # Ambil emosi terakhir user agar quote-nya 'nyambung'
-        cursor.execute("SELECT emotion FROM user_activity ORDER BY id DESC LIMIT 1")
-        last_emotion = cursor.fetchone()
-        emotion_context = last_emotion[0] if last_emotion else "santai"
-        
-        instruction = f"Buatlah 1 kalimat quote penyemangat pendek (max 15 kata) untuk seseorang yang sedang merasa {emotion_context}. Gunakan gaya bahasa {persona}. Jangan pakai kutipan tokoh terkenal, buatlah original."
-        
-        engine = get_engine()
-        res = engine.analyze(f"Buat quote: {instruction}", persona)
-        
-        quote_text = res.get("empathy_response", "Tetap semangat ya bestie! ✨")
-        author = "MindStep AI"
-        
-        cursor.execute(
-            "INSERT INTO daily_quotes (quote, author, target_date) VALUES (?, ?, ?)",
-            (quote_text, author, today_date)
-        )
-        conn.commit()
-        conn.close()
-        
-        return {"quote": quote_text, "author": author}
-    except Exception as e:
-        print(f"Error getting quote: {e}")
-        return {"quote": "Setiap progress kecil tetaplah progress. Kamu hebat!", "author": "MindStep AI"}
+    """Quote di-disable sesuai request user."""
+    return {"quote": "", "author": ""}
 
 @app.get("/api/plant")
 def get_plant():
@@ -391,6 +432,8 @@ def reset_all_data():
         cursor.execute("DELETE FROM semantic_cache")
         # Reset Mental Garden
         cursor.execute("UPDATE plant_stats SET level = 1, xp = 0 WHERE id = 1")
+        # Kosongkan histori session (Chat History)
+        cursor.execute("DELETE FROM sessions")
         conn.commit()
         conn.close()
         return {"status": "success", "message": "Semua data termasuk cache memori AI berhasil dihapus."}
@@ -431,6 +474,15 @@ async def analyze_brain_dump(request: AnalysisRequest):
             parsed_data.get("energy_level_required", "Rendah"),
             request.curhatan,
             request.sessionId
+        )
+
+        from datetime import datetime
+        now_ts = datetime.now().isoformat()
+        save_session_to_db(
+            request.sessionId or f"sess_{int(datetime.now().timestamp())}",
+            now_ts,
+            request.curhatan,
+            parsed_data
         )
             
         return parsed_data
