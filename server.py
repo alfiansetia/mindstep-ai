@@ -358,21 +358,25 @@ def get_plant():
 def grow_plant(amount: int = 10):
     """Menambah XP tanaman mental (misal 10 XP per tugas selesai)."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         cursor.execute("UPDATE plant_stats SET xp = xp + ? WHERE id = 1", (amount,))
         
         # Logika Level Up (tiap 100 XP naik level)
         cursor.execute("SELECT xp, level FROM plant_stats WHERE id = 1")
-        xp, level = cursor.fetchone()
+        row = cursor.fetchone()
+        xp, level = row[0], row[1]
+        
         new_level = (xp // 100) + 1
         if new_level > level:
             cursor.execute("UPDATE plant_stats SET level = ? WHERE id = 1", (new_level,))
+            level = new_level
             
         conn.commit()
         conn.close()
-        return {"status": "ok", "new_xp": xp + amount, "level": new_level}
+        return {"status": "ok", "new_xp": xp, "level": level}
     except Exception as e:
+        if 'conn' in locals(): conn.close()
         return {"error": str(e)}
 
 @app.post("/api/reset")
