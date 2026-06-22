@@ -351,12 +351,20 @@ export default function App() {
 
       // Reset All States
       setSessions([]);
+      setDiaryItems([]); // Bersihkan diary timeline
       setActiveAnalysis(null);
       setActiveSessionId(null);
       setCurhatan("");
       setPlant({ level: 1, xp: 0, type: "succulent" });
       setStats(null);
+      setDailyQuote(null); // Bersihkan quote lama
       setShowDashboard(false);
+      setShowDiary(false);
+
+      // Re-fetch untuk memastikan data default dari DB terambil
+      fetchPlant();
+      fetchStats();
+      fetchDailyQuote();
 
       // Show Persona Modal again
       setShowPersonaModal(true);
@@ -731,21 +739,6 @@ export default function App() {
               </div>
             </div>
           </div>
-
-          {/* DAILY QUOTE SECTION */}
-          {dailyQuote && (
-            <div className="bg-white/60 backdrop-blur-sm border border-white p-6 rounded-[32px] shadow-soft animate-fadeIn relative overflow-hidden group">
-              <div className="absolute top-0 left-0 p-2 opacity-5">
-                <Heart className="h-10 w-10 text-[#D9AE94]" />
-              </div>
-              <p className="text-sm md:text-base font-serif italic text-[#4A5D4D] leading-relaxed relative z-10">
-                "{dailyQuote.quote}"
-              </p>
-              <p className="text-[10px] uppercase tracking-widest text-[#8DAA91] font-bold mt-3 opacity-60 group-hover:opacity-100 transition-opacity">
-                — {dailyQuote.author}
-              </p>
-            </div>
-          )}
 
           {/* INPUT FORM: THE BRAIN ZONE */}
           <div className="bg-white border border-[#E5E0D5] rounded-[32px] p-6 flex flex-col gap-4 relative shadow-soft">

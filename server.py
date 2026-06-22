@@ -18,9 +18,15 @@ load_dotenv()
 DB_PATH = "cache.db"
 
 def init_db():
+    if not os.path.exists(DB_PATH):
+        print("Initial database created.")
+        
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
+        
+        # Aktifkan WAL Mode agar tidak 'database is locked'
+        cursor.execute("PRAGMA journal_mode=WAL")
         # Tabel untuk Semantic Cache
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS semantic_cache (
@@ -172,7 +178,7 @@ def save_semantic_cache(curhatan: str, embedding: List[float], response_data: di
     if not embedding:
         return
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         cursor.execute(
             "INSERT OR REPLACE INTO semantic_cache (curhatan, embedding, response, persona) VALUES (?, ?, ?, ?)",
@@ -187,7 +193,7 @@ def save_semantic_cache(curhatan: str, embedding: List[float], response_data: di
 def save_user_activity(emotion: str, energy_level: str, curhatan: str, session_id: str = None):
     """Mencatatkan histori emosi pengguna untuk keperluan statistik dashboard."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         # Simpan ringkasan curhatan (ambil 50 karakter pertama)
         summary = (curhatan[:47] + '..') if len(curhatan) > 50 else curhatan
@@ -204,7 +210,7 @@ def save_user_activity(emotion: str, energy_level: str, curhatan: str, session_i
 def delete_session(session_id: str):
     """Menghapus data aktivitas berdasarkan session_id."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM user_activity WHERE session_id = ?", (session_id,))
         conn.commit()
@@ -269,7 +275,7 @@ def get_stats():
 def get_detailed_history(limit: int = 20):
     """Mengambil history curhat detail untuk tampilan Diary."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id, emotion, energy_level, curhatan_summary, created_at, session_id FROM user_activity ORDER BY id DESC LIMIT ?",
@@ -299,7 +305,7 @@ def get_daily_quote(persona: str = "genz"):
     today_date = date.today().isoformat()
     
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         
         # Cek apakah sudah ada quote buat hari ini
@@ -339,7 +345,7 @@ def get_daily_quote(persona: str = "genz"):
 def get_plant():
     """Mengambil status tanaman mental."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         cursor.execute("SELECT level, xp, plant_type FROM plant_stats WHERE id = 1")
         row = cursor.fetchone()
@@ -373,7 +379,7 @@ def grow_plant(amount: int = 10):
 def reset_all_data():
     """Mereset seluruh data aplikasi (Aktivitas, Garden, & Semantic Cache)."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         # Kosongkan histori emosi
         cursor.execute("DELETE FROM user_activity")
