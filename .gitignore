@@ -12,3 +12,4 @@ cache.db-journal
 __pycache__
 cache.db-shm
 cache.db-wal
+venv/
