@@ -257,10 +257,10 @@ export default function App() {
     }
   };
 
-  const growPlant = async (amount: number = 15) => {
+  const growPlant = async (amount: number = 20) => {
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/plant/grow?amount=${amount}`,
+        `${API_BASE_URL}/api/plant/xp?amount=${amount}`,
         {
           method: "POST",
           headers: { "X-User-Id": userId },
@@ -269,7 +269,7 @@ export default function App() {
       if (response.ok) {
         const data = await response.json();
         const levedUp = data.level > plant.level;
-        setPlant({ ...plant, xp: data.new_xp, level: data.level });
+        setPlant({ ...plant, xp: data.xp, level: data.level });
         if (levedUp) {
           setShowPlantPopup(true);
           setTimeout(() => setShowPlantPopup(false), 4000);
