@@ -659,9 +659,11 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono text-[#7A7469]">
+          <div className="hidden md:flex items-center gap-2 sm:gap-3 text-xs font-mono text-[#7A7469]">
             <button
               onClick={() => {
+                setShowDashboard(false);
+                setShowGarden(false);
                 fetchDiary();
                 setShowDiary(true);
               }}
@@ -671,20 +673,28 @@ export default function App() {
               <span className="hidden sm:inline font-bold">Diary</span>
             </button>
             <button
-              onClick={() => setShowGarden(true)}
+              onClick={() => {
+                setShowDashboard(false);
+                setShowDiary(false);
+                setShowGarden(true);
+              }}
               className="flex items-center gap-2 bg-[#8DAA91] text-white px-4 py-2 rounded-full shadow-sm hover:bg-[#7ba081] transition-all"
             >
               <Sprout className="h-4 w-4" />
               <span className="hidden sm:inline font-bold">My Garden</span>
             </button>
             <button
-              onClick={toggleDashboard}
+              onClick={() => {
+                setShowDiary(false);
+                setShowGarden(false);
+                toggleDashboard();
+              }}
               className="flex items-center gap-2 bg-[#4A5D4D] text-white px-4 py-2 rounded-full shadow-sm hover:bg-[#3d4d3f] transition-all"
             >
               <BarChart3 className="h-4 w-4" />
               <span className="hidden sm:inline font-bold">Insights</span>
             </button>
-            <div className="hidden md:flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-[#E5E0D5] text-[#3A3A3A]">
+            <div className="hidden lg:flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-[#E5E0D5] text-[#3A3A3A]">
               <Calendar className="h-3.5 w-3.5 text-[#8DAA91]" />
               <span>
                 {new Date().toLocaleDateString("id-ID", {
@@ -695,6 +705,11 @@ export default function App() {
                 })}
               </span>
             </div>
+          </div>
+
+          {/* User Level Mobile Only Badge */}
+          <div className="flex md:hidden items-center gap-1 text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-[#8DAA91] text-white">
+            Lvl {plant.level}
           </div>
         </div>
       </header>
@@ -1753,6 +1768,51 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <nav className="md:hidden fixed bottom-6 left-6 right-6 z-50 bg-[#F2EDE4]/90 backdrop-blur-lg border border-[#E5E0D5] rounded-full shadow-2xl px-6 py-3 flex items-center justify-between">
+        <button
+          onClick={() => {
+            setShowDashboard(false);
+            setShowGarden(false);
+            fetchDiary();
+            setShowDiary(true);
+          }}
+          className={`flex flex-col items-center gap-1 ${showDiary ? "text-[#8DAA91]" : "text-[#8B8374]"}`}
+        >
+          <History className="h-5 w-5" />
+          <span className="text-[10px] font-bold uppercase tracking-widest">
+            Diary
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setShowDashboard(false);
+            setShowDiary(false);
+            setShowGarden(true);
+          }}
+          className={`h-12 w-12 -mt-8 rounded-full shadow-lg border-2 border-white flex items-center justify-center transition-transform active:scale-90 ${showGarden ? "bg-[#4A5D4D] text-white" : "bg-[#8DAA91] text-white"}`}
+        >
+          <Sprout className="h-6 w-6" />
+        </button>
+
+        <button
+          onClick={() => {
+            setShowDiary(false);
+            setShowGarden(false);
+            toggleDashboard();
+          }}
+          className={`flex flex-col items-center gap-1 ${showDashboard ? "text-[#8DAA91]" : "text-[#8B8374]"}`}
+        >
+          <BarChart3 className="h-5 w-5" />
+          <span className="text-[10px] font-bold uppercase tracking-widest">
+            Insights
+          </span>
+        </button>
+      </nav>
+
+      <div className="md:hidden h-24"></div>
+      {/* Spacer to prevent content from being hidden by bottom nav */}
     </div>
   );
 }
