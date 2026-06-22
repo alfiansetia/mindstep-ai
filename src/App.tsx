@@ -832,9 +832,23 @@ export default function App() {
                 <textarea
                   value={curhatan}
                   onChange={(e) => setCurhatan(e.target.value)}
+                  maxLength={3000}
                   placeholder="Ketik curhatan atau hal yang bikin kamu stress berat di sini..."
                   className="w-full min-h-[160px] bg-[#F9F7F2]/50 border border-[#E5E0D5] rounded-2xl p-4 text-sm text-[#3A3A3A] placeholder-[#A09B90] focus:outline-none focus:ring-1 focus:ring-[#8DAA91]/50 focus:border-[#8DAA91]/50 resize-y leading-relaxed"
                 />
+
+                {/* Character Counter */}
+                <div className="absolute right-3.5 top-2.5">
+                  <span
+                    className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md ${
+                      curhatan.length >= 2800
+                        ? "bg-red-50 text-red-400"
+                        : "bg-[#F2EDE4] text-[#8B8374]"
+                    }`}
+                  >
+                    {curhatan.length}/3000
+                  </span>
+                </div>
 
                 {/* Microphone dictate trigger */}
                 <div className="absolute right-3.5 bottom-3.5 flex items-center gap-2">

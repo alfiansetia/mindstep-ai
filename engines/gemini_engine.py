@@ -1,48 +1,43 @@
 import os
-import requests
 import json
+from google import genai
+from google.genai import types
 from engines.base import BaseEngine
 from prompts import get_system_instruction, get_analysis_prompt
 
 class GeminiEngine(BaseEngine):
     def __init__(self):
-        # Menggunakan API v1beta atau v1
-        self.api_key = os.getenv("GEMINI_API_KEY", "")
-        self.model = os.getenv("AI_MODEL", "gemini-1.5-flash")
-        self.api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+        # Konfigurasi Client Gemini baru (SDK v2)
+        self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        self.model_id = os.getenv("AI_MODEL", "gemini-flash-lite-latest").strip()
+        
+        if not self.api_key:
+            print("⚠️ [GeminiEngine] API Key tidak ditemukan di .env!")
+            
+        self.client = genai.Client(api_key=self.api_key)
 
     def analyze(self, curhatan: str, persona: str) -> dict:
         system_instruction = get_system_instruction(persona)
         prompt = get_analysis_prompt(curhatan, system_instruction)
         
-        # Payload untuk Google Gemini
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
-            "generationConfig": {
-                "response_mime_type": "application/json",
-                "temperature": 0.7,
-                "topP": 0.95,
-                "topK": 64,
-                "maxOutputTokens": 2048,
-            }
-        }
-        
-        headers = {
-            "Content-Type": "application/json"
-        }
-        
         try:
-            response = requests.post(self.api_url, json=payload, headers=headers)
-            response.raise_for_status()
-            result = response.json()
+            # Panggil Gemini via SDK baru
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    top_p=0.95,
+                    top_k=64,
+                    max_output_tokens=2048,
+                    response_mime_type="application/json"
+                )
+            )
             
-            # Ekstrak teks dari struktur response Gemini
-            response_text = result['candidates'][0]['content']['parts'][0]['text']
-            return self.clean_json_response(response_text)
+            if not response.text:
+                raise Exception("Gemini SDK v2 returned an empty response.")
+                
+            return self.clean_json_response(response.text)
         except Exception as e:
-            print(f"[GeminiEngine] Error: {e}")
-            if 'response' in locals() and response.text:
-                print(f"Detail Error: {response.text}")
+            print(f"🚨 [GeminiEngine SDK v2] Error: {e}")
             raise e

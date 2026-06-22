@@ -403,6 +403,10 @@ async def analyze_brain_dump(request: AnalysisRequest):
     """
     Endpoint utama untuk menganalisis curhatan pengguna menggunakan engine LLM pilihan.
     """
+    # Batasi input maksimal 3000 karakter demi performa
+    if len(request.curhatan) > 3000:
+        raise HTTPException(status_code=400, detail="Curhatan kamu terlalu panjang (maksimal 3000 karakter). Coba cicil dulu ya!")
+
     persona = request.userPersona or "genz"
     
     # 1. Cek Semantic Cache
