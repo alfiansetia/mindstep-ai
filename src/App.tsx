@@ -89,6 +89,14 @@ export default function App() {
   const [showGarden, setShowGarden] = useState<boolean>(false);
   const [showPlantPopup, setShowPlantPopup] = useState<boolean>(false);
 
+  // Diary & Quote States
+  const [showDiary, setShowDiary] = useState<boolean>(false);
+  const [diaryItems, setDiaryItems] = useState<any[]>([]);
+  const [dailyQuote, setDailyQuote] = useState<{
+    quote: string;
+    author: string;
+  } | null>(null);
+
   // History & Local Registry
   const [sessions, setSessions] = useState<HistorySession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -185,9 +193,33 @@ export default function App() {
       recognitionRef.current = rec;
     }
 
-    // Initial Plant Fetch
+    // Fetch Initial Data
     fetchPlant();
+    fetchStats();
+    fetchDailyQuote();
   }, []);
+
+  const fetchDailyQuote = async () => {
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/quote?persona=${userPersona}`,
+      );
+      const data = await res.json();
+      if (data.quote) setDailyQuote(data);
+    } catch (e) {
+      console.error("Failed to fetch quote", e);
+    }
+  };
+
+  const fetchDiary = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/history`);
+      const data = await res.json();
+      setDiaryItems(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Failed to fetch diary", e);
+    }
+  };
 
   const fetchPlant = async () => {
     try {
@@ -635,6 +667,16 @@ export default function App() {
 
           <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono text-[#7A7469]">
             <button
+              onClick={() => {
+                fetchDiary();
+                setShowDiary(true);
+              }}
+              className="flex items-center gap-2 bg-white border border-[#E5E0D5] text-[#4A5D4D] px-4 py-2 rounded-full shadow-sm hover:bg-[#F9F7F2] transition-all"
+            >
+              <History className="h-4 w-4 text-[#8DAA91]" />
+              <span className="hidden sm:inline font-bold">Diary</span>
+            </button>
+            <button
               onClick={() => setShowGarden(true)}
               className="flex items-center gap-2 bg-[#8DAA91] text-white px-4 py-2 rounded-full shadow-sm hover:bg-[#7ba081] transition-all"
             >
@@ -690,6 +732,21 @@ export default function App() {
             </div>
           </div>
 
+          {/* DAILY QUOTE SECTION */}
+          {dailyQuote && (
+            <div className="bg-white/60 backdrop-blur-sm border border-white p-6 rounded-[32px] shadow-soft animate-fadeIn relative overflow-hidden group">
+              <div className="absolute top-0 left-0 p-2 opacity-5">
+                <Heart className="h-10 w-10 text-[#D9AE94]" />
+              </div>
+              <p className="text-sm md:text-base font-serif italic text-[#4A5D4D] leading-relaxed relative z-10">
+                "{dailyQuote.quote}"
+              </p>
+              <p className="text-[10px] uppercase tracking-widest text-[#8DAA91] font-bold mt-3 opacity-60 group-hover:opacity-100 transition-opacity">
+                — {dailyQuote.author}
+              </p>
+            </div>
+          )}
+
           {/* INPUT FORM: THE BRAIN ZONE */}
           <div className="bg-white border border-[#E5E0D5] rounded-[32px] p-6 flex flex-col gap-4 relative shadow-soft">
             {/* Persona Selector (Adapt AI talking style & context) */}
@@ -742,7 +799,7 @@ export default function App() {
             </div>
 
             {/* Curhatan Section */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 mt-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-[#4A5D4D] font-display uppercase tracking-wider flex items-center gap-1.5">
                   <Layers className="h-4 w-4 text-[#8DAA91]" />
@@ -753,10 +810,9 @@ export default function App() {
                 <div className="flex gap-2">
                   <button
                     onClick={loadDemoPreset}
-                    className="text-[10px] font-mono text-[#8DAA91] hover:text-[#4A5D4D] transition-colors bg-[#F2EDE4] border border-[#E5E0D5] px-2.5 py-1 rounded-full text-xs font-semibold"
-                    title="Load specific Chapter 2 Overthinking prompt"
+                    className="text-[10px] font-mono text-[#8DAA91] hover:text-[#4A5D4D] transition-colors bg-[#F2EDE4] border border-[#E5E0D5] px-2.5 py-1 rounded-full font-bold"
                   >
-                    🚀 Pakai Curhatan Demo
+                    🚀 Demo
                   </button>
                   {curhatan && (
                     <button
@@ -776,12 +832,6 @@ export default function App() {
                   <p className="text-xs text-[#7A7469] font-mono flex-grow truncate">
                     {speechFeedback}
                   </p>
-                  <button
-                    onClick={() => recognitionRef.current?.stop()}
-                    className="text-[10px] text-[#8B8374] hover:text-red-500 transition-colors"
-                  >
-                    Batal
-                  </button>
                 </div>
               )}
 
@@ -789,7 +839,7 @@ export default function App() {
                 <textarea
                   value={curhatan}
                   onChange={(e) => setCurhatan(e.target.value)}
-                  placeholder="Ketik curhatan atau hal yang bikin kamu stress berat di sini... Bebas tumpahin semua dalam keluh kesah acak."
+                  placeholder="Ketik curhatan atau hal yang bikin kamu stress berat di sini..."
                   className="w-full min-h-[160px] bg-[#F9F7F2]/50 border border-[#E5E0D5] rounded-2xl p-4 text-sm text-[#3A3A3A] placeholder-[#A09B90] focus:outline-none focus:ring-1 focus:ring-[#8DAA91]/50 focus:border-[#8DAA91]/50 resize-y leading-relaxed"
                 />
 
@@ -801,9 +851,8 @@ export default function App() {
                     className={`h-9 w-9 rounded-full flex items-center justify-center transition-all ${
                       isListening
                         ? "bg-red-400 text-white animate-pulse shadow-md ring-4 ring-red-400/10"
-                        : "bg-[#F2EDE4] text-[#4A5D4D] hover:bg-[#E5E0D5] hover:text-[#3A3A3A]"
+                        : "bg-[#F2EDE4] text-[#4A5D4D] hover:bg-[#E5E0D5]"
                     }`}
-                    title="Bicara lewat Microphone (Web Speech API)"
                   >
                     {isListening ? (
                       <MicOff className="h-4 w-4" />
@@ -828,7 +877,7 @@ export default function App() {
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Dekomposisi Pikiran Kamu Sedang Diproses...</span>
+                  <span>Processing...</span>
                 </>
               ) : (
                 <>
@@ -1596,6 +1645,117 @@ export default function App() {
                   </p>
                 </div>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MOOD DIARY MODAL */}
+      {showDiary && (
+        <div className="fixed inset-0 z-50 bg-[#3A3A3A]/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#F9F7F2] border border-[#E5E0D5] w-full max-w-2xl rounded-[40px] p-6 md:p-10 shadow-2xl relative overflow-hidden flex flex-col gap-6 max-h-[90vh] animate-fadeIn">
+            <button
+              onClick={() => setShowDiary(false)}
+              className="absolute top-6 right-6 h-10 w-10 rounded-full bg-white border border-[#E5E0D5] flex items-center justify-center text-[#8B8374] hover:text-[#3A3A3A] transition-all z-10"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex flex-col gap-1 pr-12">
+              <h2 className="text-2xl font-bold font-display text-[#4A5D4D] flex items-center gap-3">
+                <History className="h-6 w-6 text-[#8DAA91]" />
+                Your Mood Diary
+              </h2>
+              <p className="text-xs text-[#7A7469]">
+                Melihat kembali setiap langkah pertumbuhanmu.
+              </p>
+            </div>
+
+            <div className="flex-grow overflow-y-auto pr-2 space-y-8 py-4 custom-scrollbar">
+              {diaryItems.length > 0 ? (
+                <div className="relative border-l-2 border-[#E5E0D5] ml-4 pl-8 space-y-10">
+                  {diaryItems.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="relative animate-fadeIn"
+                      style={{ animationDelay: `${idx * 0.1}s` }}
+                    >
+                      <div className="absolute -left-[41px] top-1.5 h-5 w-5 rounded-full bg-white border-4 border-[#8DAA91] shadow-sm"></div>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-bold text-[#8B8374] uppercase tracking-widest bg-white border border-[#E5E0D5] px-2.5 py-1 rounded-full">
+                            {new Date(item.date).toLocaleDateString("id-ID", {
+                              weekday: "long",
+                              day: "numeric",
+                              month: "long",
+                            })}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                              item.energy.toLowerCase().includes("tinggi")
+                                ? "bg-red-50 text-red-500 border-red-100"
+                                : item.energy.toLowerCase().includes("sedang")
+                                  ? "bg-[#D9AE94]/10 text-[#D9AE94] border-[#D9AE94]/20"
+                                  : "bg-[#8DAA91]/10 text-[#8DAA91] border-[#8DAA91]/20"
+                            }`}
+                          >
+                            Energi: {item.energy}
+                          </span>
+                        </div>
+                        <div className="bg-white border border-[#E5E0D5] p-5 rounded-3xl shadow-sm hover:shadow-md transition-shadow group">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h4 className="text-sm font-bold text-[#4A5D4D] group-hover:text-[#8DAA91] transition-colors line-clamp-1">
+                                {item.emotion}
+                              </h4>
+                              <p className="text-xs text-[#7A7469] mt-2 leading-relaxed italic">
+                                "{item.summary}"
+                              </p>
+                            </div>
+                            <div className="h-10 w-10 flex items-center justify-center rounded-2xl bg-[#F9F7F2] border border-[#E5E0D5] shrink-0">
+                              {item.emotion.toLowerCase().includes("anxious") ||
+                              item.emotion.toLowerCase().includes("cemas")
+                                ? "😰"
+                                : item.emotion
+                                      .toLowerCase()
+                                      .includes("burnout") ||
+                                    item.emotion.toLowerCase().includes("lelah")
+                                  ? "😫"
+                                  : item.emotion
+                                        .toLowerCase()
+                                        .includes("stres") ||
+                                      item.emotion
+                                        .toLowerCase()
+                                        .includes("pusing")
+                                    ? "🤯"
+                                    : item.emotion
+                                          .toLowerCase()
+                                          .includes("bingung")
+                                      ? "🤔"
+                                      : "🌱"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-20 text-center flex flex-col items-center gap-4">
+                  <div className="h-16 w-16 rounded-full bg-[#F2EDE4] flex items-center justify-center text-3xl">
+                    📭
+                  </div>
+                  <p className="text-sm text-[#8B8374] italic">
+                    Belum ada catatan di buku diarimu.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="text-center opacity-50 pt-4 border-t border-[#E5E0D5]">
+              <p className="text-[10px] font-mono text-[#8B8374] uppercase tracking-widest">
+                MindStep AI Journal System
+              </p>
             </div>
           </div>
         </div>

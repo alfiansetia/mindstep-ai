@@ -57,6 +57,17 @@ def init_db():
             plant_type TEXT DEFAULT 'succulent'
         )
         """)
+        # Tabel untuk Quote Harian
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS daily_quotes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote TEXT,
+            author TEXT,
+            target_date DATE UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
         # Masukkan baris pertama jika kosong
         cursor.execute("INSERT OR IGNORE INTO plant_stats (id, level, xp) VALUES (1, 1, 0)")
         
@@ -82,39 +93,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Base URL Ollama — ubah via .env agar bisa dipakai dari luar (misal remote server)
-# Contoh: OLLAMA_BASE_URL=http://192.168.1.100:11434
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_API_URL = f"{OLLAMA_BASE_URL.rstrip('/')}/api/generate"
-
-# Nama model Ollama yang diunduh (misal: llama3, mistral, gemma2, dll.)
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
-
-# Timeout request ke Ollama (detik) — LLM lokal bisa lambat, default 180 detik
-# Naikkan via .env jika masih sering 503: OLLAMA_TIMEOUT=300
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
-
 # Konfigurasi Semantic Cache (Diperketat agar emosi lebih akurat)
 SEMANTIC_CACHE_ENABLED = os.getenv("SEMANTIC_CACHE_ENABLED", "true").lower() == "true"
 SEMANTIC_CACHE_THRESHOLD = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.95"))
 
+# Import Engine Factory
+from engine_factory import get_engine
+
 def get_embedding(text: str) -> List[float]:
-    """Menghitung vektor embedding dari suatu teks menggunakan endpoint /api/embed Ollama (versi terbaru)."""
-    embed_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/embed"
-    payload = {
-        "model": OLLAMA_MODEL,
-        "input": text
-    }
+    """Menghitung vektor embedding menggunakan Ollama (dibutuhkan untuk Semantic Cache)."""
+    # Catatan: Embedding tetap menggunakan Ollama lokal karena gratis & cepat untuk caching lokal.
+    ollama_base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip('/')
+    ollama_model = os.getenv("OLLAMA_MODEL", "llama3")
+    embed_url = f"{ollama_base}/api/embed"
     try:
-        response = requests.post(embed_url, json=payload, timeout=OLLAMA_TIMEOUT)
+        response = requests.post(embed_url, json={"model": ollama_model, "input": text}, timeout=10)
         response.raise_for_status()
-        # Versi terbaru mengembalikan 'embeddings' (jamak), kita ambil indeks pertama
         result = response.json()
         if "embeddings" in result:
             return result["embeddings"][0]
         return result.get("embedding", [])
     except Exception as e:
-        print(f"⚠️ Gagal generate embedding dari Ollama: {e}")
+        print(f"⚠️ Gagal generate embedding: {e}")
         return []
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
@@ -133,7 +133,7 @@ def find_semantic_cache(new_embedding: List[float], persona: str) -> Optional[di
     if not new_embedding:
         return None
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         cursor.execute("SELECT curhatan, embedding, response FROM semantic_cache WHERE persona = ?", (persona,))
         rows = cursor.fetchall()
@@ -234,13 +234,14 @@ class AnalysisResponse(BaseModel):
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "engine": "FastAPI & Ollama Local"}
+    provider = os.getenv("LLM_PROVIDER", "ollama")
+    return {"status": "ok", "engine": provider}
 
 @app.get("/api/stats")
 def get_stats():
     """Mengambil statistik emosi untuk ditampilkan di dashboard."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
         cursor = conn.cursor()
         
         # 1. Hitung distribusi emosi
@@ -263,6 +264,76 @@ def get_stats():
         }
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/api/history")
+def get_detailed_history(limit: int = 20):
+    """Mengambil history curhat detail untuk tampilan Diary."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, emotion, energy_level, curhatan_summary, created_at, session_id FROM user_activity ORDER BY id DESC LIMIT ?",
+            (limit,)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        
+        history = []
+        for r in rows:
+            history.append({
+                "id": r[0],
+                "emotion": r[1],
+                "energy": r[2],
+                "summary": r[3],
+                "date": r[4],
+                "session_id": r[5]
+            })
+        return history
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/quote")
+def get_daily_quote(persona: str = "genz"):
+    """Mengambil atau membuat quote penyemangat harian yang personal."""
+    from datetime import date
+    today_date = date.today().isoformat()
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Cek apakah sudah ada quote buat hari ini
+        cursor.execute("SELECT quote, author FROM daily_quotes WHERE target_date = ?", (today_date,))
+        row = cursor.fetchone()
+        
+        if row:
+            conn.close()
+            return {"quote": row[0], "author": row[1]}
+        
+        # Ambil emosi terakhir user agar quote-nya 'nyambung'
+        cursor.execute("SELECT emotion FROM user_activity ORDER BY id DESC LIMIT 1")
+        last_emotion = cursor.fetchone()
+        emotion_context = last_emotion[0] if last_emotion else "santai"
+        
+        instruction = f"Buatlah 1 kalimat quote penyemangat pendek (max 15 kata) untuk seseorang yang sedang merasa {emotion_context}. Gunakan gaya bahasa {persona}. Jangan pakai kutipan tokoh terkenal, buatlah original."
+        
+        engine = get_engine()
+        res = engine.analyze(f"Buat quote: {instruction}", persona)
+        
+        quote_text = res.get("empathy_response", "Tetap semangat ya bestie! ✨")
+        author = "MindStep AI"
+        
+        cursor.execute(
+            "INSERT INTO daily_quotes (quote, author, target_date) VALUES (?, ?, ?)",
+            (quote_text, author, today_date)
+        )
+        conn.commit()
+        conn.close()
+        
+        return {"quote": quote_text, "author": author}
+    except Exception as e:
+        print(f"Error getting quote: {e}")
+        return {"quote": "Setiap progress kecil tetaplah progress. Kamu hebat!", "author": "MindStep AI"}
 
 @app.get("/api/plant")
 def get_plant():
@@ -320,14 +391,11 @@ def reset_all_data():
 @app.post("/api/analyze", response_model=AnalysisResponse)
 async def analyze_brain_dump(request: AnalysisRequest):
     """
-    Endpoint alternatif untuk memisahkan tugas besar berantakan pengguna 
-    menjadi 3 langkah mikro menggunakan LLM lokal (Ollama).
+    Endpoint utama untuk menganalisis curhatan pengguna menggunakan engine LLM pilihan.
     """
-    import requests # Pastikan library requests terinstall (pip install requests)
-
     persona = request.userPersona or "genz"
     
-    # Cek apakah curhatan serupa ada di Semantic Cache
+    # 1. Cek Semantic Cache
     embedding = []
     if SEMANTIC_CACHE_ENABLED:
         embedding = get_embedding(request.curhatan)
@@ -335,95 +403,15 @@ async def analyze_brain_dump(request: AnalysisRequest):
         if cached_response:
             return cached_response
     
-    # 1. Tentukan Sistem Instruksi dan Gaya bicara berdasarkan Persona pilihan
-    if persona == "professional":
-        system_instruction = (
-            "Kamu adalah MindStep AI, asisten produktivitas mikro profesional untuk pekerja atau orang dewasa di Indonesia. "
-            "Tugasmu membantu mengurai stres kerjaan menjadi maksimal 3 langkah mikro produktivitas di bawah 15 menit. "
-            "Gunakan Bahasa Indonesia baku yang baik, sopan, tulus, dewasa, dan sangat tenang. "
-            "WAJIB: Seluruh respons, termasuk semua nilai dalam JSON (empathy_response, detected_emotion, title, description) HARUS ditulis dalam Bahasa Indonesia. DILARANG menggunakan Bahasa Inggris kecuali istilah teknis yang sudah sangat umum. "
-            "JANGAN REKOMENDASIKAN MAKANAN/KULINER atau topik di luar manajemen stres/produktivitas. Tolak dengan sopan jika ada pertanyaan di luar topik."
-        )
-    else:
-        system_instruction = (
-            "Kamu adalah MindStep AI, bestie produktivitas Gen Z. "
-            "WAJIB: Gunakan Bahasa Indonesia sebagai bahasa UTAMA. "
-            "Gaya bahasa: Kasual Jaksel (dominan Indo + bumbu kata: jujurly, valid, healing, slay, pusing bgt, spill, anyway). "
-            "FOKUS TUGAS: Hanya urai stres jadi 3 langkah mikro (max 15 mnt). "
-            "PEMBATASAN TOPIK: Tolak pertanyaan di luar manajemen stres/produktivitas (misal: rekomendasi makanan, berita, info umum). "
-            "CARA TOLAK: Tolak dengan empati ala sahabat, contoh: 'Aduh bestie, mending kita fokus beresin rasa pusing lo dulu yuk, topik itu spill nanti aja kalau lo udah chill'."
-        )
-
-    # 2. Rancang Prompt agar Output Ollama tervalidasi dalam Format JSON yang Konsisten
-    prompt = f"""
-Sistem Instruksi: {system_instruction}
-
-ATURAN BAHASA & LOGIKA (WAJIB DIIKUTI):
-1. NO FULL ENGLISH: Jangan pernah membalas satu kalimat pun dalam Bahasa Inggris penuh. Gunakan Bahasa Indonesia Jaksel yang luwes.
-2. HUBUNGAN LOGIS: field "micro_steps" HARUS solusi nyata untuk masalah di "Curhatan Baru Pengguna". 
-3. PERSONA: Tetap gunakan gaya Gen Z Jaksel (Indonsia + Slang) di "empathy_response" dan "title".
-4. OUTPUT JSON: Keluarkan hanya JSON bersih.
-
-ISI JSON HARUS:
-- "empathy_response": Respon empati hangat dalam Bahasa Indonesia Jaksel (Bukan Inggris!).
-- "detected_emotion": Emosi (misal: "Overwhelmed parah", "Burnout", "Dead-end").
-- "energy_level_required": "Rendah", "Sedang", atau "Tinggi".
-- "micro_steps": 3 langkah konkret dalam Bahasa Indonesia.
-
-Curhatan Baru Pengguna:
-"{request.curhatan}"
-
-Keluarkan balasan HANYA dalam struktur JSON bersih berikut (tanpa markdown, tanpa ```json):
-{{
-  "empathy_response": "Kalimat respons empati hangat dalam Bahasa Indonesia.",
-  "detected_emotion": "Label emosi utama (misal: Anxious, Burnout, Overwhelmed, Confused)",
-  "energy_level_required": "Rendah / Sedang / Tinggi",
-  "micro_steps": [
-    {{
-      "step_id": 1,
-      "title": "Langkah pertama yang sangat enteng dalam Bahasa Indonesia",
-      "description": "Penjelasan singkat cara memulainya dalam Bahasa Indonesia.",
-      "duration_minutes": 3
-    }},
-    {{
-      "step_id": 2,
-      "title": "Langkah lanjutan yang logis dalam Bahasa Indonesia",
-      "description": "Eksplorasi kecil berikutnya dalam Bahasa Indonesia.",
-      "duration_minutes": 8
-    }},
-    {{
-      "step_id": 3,
-      "title": "Langkah final ringan dalam Bahasa Indonesia",
-      "description": "Langkah ketiga agar ada progress kecil terarah.",
-      "duration_minutes": 10
-    }}
-  ]
-}}
-"""
-
-    # 3. Kirim permintaan HTTP ke daemon Ollama lokal Anda
+    # 2. Panggil Engine LLM yang dipilih (Ollama, OpenAI, dll)
     try:
-        payload = {
-            "model": OLLAMA_MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json" # Memaksa Ollama 0.1.33+ mengeluarkan format JSON yang valid
-        }
-        
-        response = requests.post(OLLAMA_API_URL, json=payload, timeout=OLLAMA_TIMEOUT)
-        response.raise_for_status()
-        
-        result_json = response.json()
-        response_text = result_json.get("response", "").strip()
-
-        # Parse text string JSON dari Ollama menjadi Dictionary Python
-        parsed_data = json.loads(response_text)
-        
-        # Simpan respons baru ke Semantic Cache
+        engine = get_engine()
+        parsed_data = engine.analyze(request.curhatan, persona)
+            
+        # 3. Simpan ke Cache & Aktivitas
         if SEMANTIC_CACHE_ENABLED and embedding:
             save_semantic_cache(request.curhatan, embedding, parsed_data, persona)
             
-        # Simpan ke histori aktivitas untuk Dashboard dengan session ID
         save_user_activity(
             parsed_data.get("detected_emotion", "Unknown"),
             parsed_data.get("energy_level_required", "Rendah"),
@@ -433,25 +421,11 @@ Keluarkan balasan HANYA dalam struktur JSON bersih berikut (tanpa markdown, tanp
             
         return parsed_data
 
-    except requests.exceptions.Timeout:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Ollama timeout setelah {OLLAMA_TIMEOUT} detik. Model mungkin masih loading atau overloaded. Coba naikkan OLLAMA_TIMEOUT di .env."
-        )
-    except requests.exceptions.RequestException as req_err:
-        raise HTTPException(
-            status_code=503, 
-            detail=f"Gagal terhubung ke Ollama lokal di {OLLAMA_API_URL}. Pastikan Ollama menyala! Error: {str(req_err)}"
-        )
-    except json.JSONDecodeError as json_err:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Ollama menghasilkan format JSON yang tidak valid. Silakan coba lagi. Error: {str(json_err)}"
-        )
     except Exception as e:
+        print(f"🚨 [Analysis Error]: {str(e)}")
         raise HTTPException(
             status_code=500, 
-            detail=f"Terjadi kesalahan internal: {str(e)}"
+            detail=f"Gagal menganalisis curhatan: {str(e)}"
         )
 
 # Serve React build (dist folder) in production

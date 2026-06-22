@@ -8,153 +8,90 @@
 
 Proyek ini telah dimigrasikan sepenuhnya menggunakan Python backend untuk melayani model AI lokal (Ollama) secara cepat dan offline.
 
-| Bagian | Teknologi | Port default |
-|--------|-----------|-------------|
-| **Frontend (FE)** | React + Vite + Tailwind | `http://localhost:5173` |
-| **Backend Python (BE)** | FastAPI + Ollama (`server.py`) | `http://localhost:8000` |
+| Bagian                  | Teknologi                  | Port default            |
+| ----------------------- | -------------------------- | ----------------------- |
+| **Frontend (FE)**       | React + Vite + Tailwind    | `http://localhost:5173` |
+| **Backend Python (BE)** | FastAPI + Multi-LLM Engine | `http://localhost:8000` |
 
 ---
 
-## Prasyarat
+## 🚀 Fitur Baru: Multi-LLM Architecture
 
-- **Node.js** v18+
-- **Python** 3.9+
-- **Ollama** — unduh di [ollama.com](https://ollama.com)
-- Package manager: `npm` dan `pip3`
+Proyek ini sekarang mendukung berbagai provider AI secara dinamis. Kamu bisa beralih dari model lokal (Ollama) ke model Cloud (GPT-4, Claude, dll) hanya dengan mengganti satu baris di `.env`.
+
+### Supported Providers:
+
+- **Ollama** (Default) — Gratis, lokal, & menjaga privasi.
+- **OpenAI** — Menggunakan GPT-3.5 atau GPT-4.
+- **Google Gemini** — Menggunakan model Gemini 1.5 Pro/Flash.
+- **OpenRouter** — Akses ke Claude, Llama-3, dan ratusan model lainnya.
+- **Groq** — Analisis super cepat dengan model Llama/Mixtral.
 
 ---
 
 ## 1. Konfigurasi Environment
 
-Salin file contoh `.env.example` ke `.env`:
-
-```bash
-cp .env.example .env
-```
-
-Buka `.env` dan sesuaikan:
+Salin file contoh `.env.example` ke `.env` (atau edit file `.env` yang ada):
 
 ```env
-# URL base API yang digunakan oleh Frontend (React).
-# Kosong ("")            = FE hit server yang sama dengan host (default)
-# http://localhost:8000  = FE langsung hit Python FastAPI (Ollama mode)
-VITE_API_BASE_URL="http://localhost:8000"
+# ── Pilih Provider AI ───────────────────────────────────────
+# Opsi: ollama, openai, openrouter, groq
+LLM_PROVIDER="ollama"
+
+# ── Konfigurasi Cloud (Jika bukan Ollama) ───────────────────
+AI_BASE_URL="https://api.openai.com/v1"
+AI_API_KEY="sk-your-key-here"
+AI_MODEL="gpt-3.5-turbo"
 
 # ── Konfigurasi Ollama ───────────────────────────────────────
-# OLLAMA_BASE_URL: Base URL tempat server Ollama berjalan.
-# Lokal (default) : http://localhost:11434
-# Remote / luar   : http://192.168.1.100:11434  atau  https://ollama.alfilab.my.id
 OLLAMA_BASE_URL="http://localhost:11434"
-
-# OLLAMA_MODEL: Nama model Ollama yang akan digunakan.
 OLLAMA_MODEL="llama3"
-
-# OLLAMA_TIMEOUT: Batas waktu tunggu response dari Ollama (dalam detik).
-# LLM lokal bisa lambat, terutama saat pertama kali load model.
 OLLAMA_TIMEOUT="180"
 
-# ── Konfigurasi Semantic Cache ───────────────────────────────────────
-# SEMANTIC_CACHE_ENABLED: Aktifkan cache semantik (true/false) untuk mempercepat respon AI yang serupa.
-# Database menggunakan SQLite bawaan Python secara otomatis (zero setup / tanpa perlu install DB).
+# ── Konfigurasi Semantic Cache ───────────────────────────────
 SEMANTIC_CACHE_ENABLED="true"
-
-# SEMANTIC_CACHE_THRESHOLD: Batas kemiripan semantik (0.0 - 1.0)
-# Nilai 0.88 berarti jika curhatan baru 88% mirip secara arti dengan curhatan lama, respons lama langsung dikembalikan.
-SEMANTIC_CACHE_THRESHOLD="0.88"
+SEMANTIC_CACHE_THRESHOLD="0.95"
 ```
 
 ---
 
-## 2. Menjalankan Backend Python (FastAPI)
+## 2. Struktur Folder & Modul
 
-Backend FastAPI bertugas untuk memproses curhatan dan menghubungkannya dengan model Ollama lokal.
-
-### Install dependensi Python
-
-```bash
-pip3 install fastapi uvicorn requests pydantic python-dotenv
-```
-
-### Jalankan server FastAPI
-
-```bash
-python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Cek status backend:
-```bash
-curl http://localhost:8000/api/health
-# {"status":"ok","engine":"FastAPI & Ollama Local"}
-```
-
----
-
-## 3. Menjalankan Frontend (React)
-
-```bash
-# Install dependensi (hanya perlu sekali)
-npm install
-
-# Jalankan Vite dev server
-npm run dev
-```
-
-Aplikasi frontend berjalan di → **http://localhost:5173**
-
----
-
-## 4. Menjalankan FE & BE Bersamaan (Rekomendasi)
-
-Buka **2 terminal terpisah**:
-
-```bash
-# Terminal 1 — Backend Python
-python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
-
-# Terminal 2 — Frontend React
-npm run dev
-```
-
----
-
-## Alur Request
-
-```
-React Frontend (port 5173)
-       ↓ (POST /api/analyze)
-FastAPI Backend (port 8000)
-       ↓ (POST /api/generate)
-Ollama (lokal / remote server)
-```
-
----
-
-## Mode Production
-
-Jika ingin dideploy atau dijalankan tanpa development server Node.js:
-
-1. Build frontend terlebih dahulu:
-   ```bash
-   npm run build
-   ```
-   Ini akan menghasilkan folder `dist/`.
-
-2. Jalankan start command:
-   ```bash
-   npm start
-   ```
-   FastAPI otomatis akan serve berkas frontend dari folder `dist/` di port `8000`. Cukup buka `http://localhost:8000` di browser.
-
----
-
-## Struktur Folder Project
+Kami menggunakan **Adapter Pattern** untuk menjaga kode tetap bersih:
 
 ```
 mindstep-ai/
-├── src/              # Kode React (Frontend)
-├── server.py         # Backend Python (FastAPI + Ollama)
-├── .env              # Konfigurasi lokal
-├── .env.example      # Template konfigurasi
-├── package.json      # Dependensi dan script Node.js
-└── vite.config.ts    # Konfigurasi Vite
+├── src/                # Kode React (Frontend)
+├── engines/            # Modul LLM Engine (Modular)
+│   ├── base.py         # Blueprint dasar AI engine
+│   ├── ollama_engine.py
+│   └── openai_engine.py
+├── prompts.py          # Pusat kendali instruksi "Bestie AI"
+├── engine_factory.py   # Logika pemilihan engine otomatis
+├── server.py           # Backend FastAPI & DB Logic
+├── cache.db            # Database SQLite (Otomatis)
+└── .env                # Semua setingan di sini
+```
+
+---
+
+## 3. Menjalankan Aplikasi
+
+1. **Backend**: `python -m uvicorn server:app --reload`
+2. **Frontend**: `npm run dev`
+
+---
+
+## Alur Request Baru
+
+```
+React Frontend
+       ↓ (POST /api/analyze)
+FastAPI Backend
+       ↓ (engine_factory)
+Pilih Provider (Ollama / GPT / OpenRouter)
+       ↓ (JSON Response)
+FastAPI Backend (Simpan ke DB & Cache)
+       ↓
+Kembali ke Frontend
 ```
