@@ -1,97 +1,103 @@
 <div align="center">
   <img width="1200" height="475" alt="MindStep AI Banner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+  
+  # 🍃 MindStep AI: Your Mental Productivity Bestie
+  
+  > **Ubah stres dan overwhelming menjadi langkah kecil yang konkret.**  
+  > Asisten produktivitas mikro berbasis LLM (Local/Cloud) dengan pendekatan psikologi Gen-Z.
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-sage.svg)](https://opensource.org/licenses/MIT)
+  [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-4A5D4D.svg)](https://fastapi.tiangolo.com/)
+  [![React](https://img.shields.io/badge/Frontend-React%2019-8DAA91.svg)](https://react.dev/)
+  [![Tailwind](https://img.shields.io/badge/Styling-Tailwind%20v4-38B2AC.svg)](https://tailwindcss.com/)
 </div>
 
-# MindStep AI
+---
 
-> Asisten produktivitas mikro berbasis LLM Lokal (Ollama) — ubah stres & penundaan jadi 3 langkah kecil yang bisa langsung dikerjakan.
+## 🌟 Mengapa MindStep AI?
 
-Proyek ini telah dimigrasikan sepenuhnya menggunakan Python backend untuk melayani model AI lokal (Ollama) secara cepat dan offline.
-
-| Bagian                  | Teknologi                  | Port default            |
-| ----------------------- | -------------------------- | ----------------------- |
-| **Frontend (FE)**       | React + Vite + Tailwind    | `http://localhost:5173` |
-| **Backend Python (BE)** | FastAPI + Multi-LLM Engine | `http://localhost:8000` |
+Sering dapet _Analysis Paralysis_ karena tugas numpuk? MindStep AI hadir buat nangkep semua "sampah pikiran" lo (_Brain-dump_) dan ngeracik **3 langkah mikro** yang durasinya di bawah 15 menit. Gak ada lagi alasan buat nggak mulai.
 
 ---
 
-## 🚀 Fitur Baru: Multi-LLM Architecture
+## ✨ Fitur "Plus" Terbaru
 
-Proyek ini sekarang mendukung berbagai provider AI secara dinamis. Kamu bisa beralih dari model lokal (Ollama) ke model Cloud (GPT-4, Claude, dll) hanya dengan mengganti satu baris di `.env`.
+### 1. 🧠 Hybrid AI Intelligence (Multi-Engine)
 
-### Supported Providers:
+Mendukung berbagai provider AI secara dinamis. Pindah dari **Ollama (Lokal & Gratis)** ke **Gemini Pro** atau **GPT-4** cuma dengan ganti satu baris di `.env`.
 
-- **Ollama** (Default) — Gratis, lokal, & menjaga privasi.
-- **OpenAI** — Menggunakan GPT-3.5 atau GPT-4.
-- **Google Gemini** — Menggunakan model Gemini 1.5 Pro/Flash.
-- **OpenRouter** — Akses ke Claude, Llama-3, dan ratusan model lainnya.
-- **Groq** — Analisis super cepat dengan model Llama/Mixtral.
+### 2. 🗄️ Database Chat Persistence (SQLite)
+
+Riwayat curhatan lo sekarang **nggak bakal ilang** walau reload browser atau pindah device. Semua tersimpan aman di database backend.
+
+### 3. 📱 Mobile-First Native Experience
+
+User Interface yang dioptimalkan untuk HP dengan **Bottom Navigation Bar**, _smooth transitions_, dan layout yang jempol-friendly.
+
+### 4. 🌙 Deep Forest Dark Mode
+
+Mode gelap spesial dengan palet warna hijau hutan yang menenangkan, cocok buat nemenin lo curhat pas malem-malem sebelum tidur.
+
+### 5. 🧘 Zen Focus Mode
+
+Fitur timer imersif yang nutupin semua gangguan di layar. Bikin lo bener-bener fokus nyelesain satu langkah kecil sampe tuntas.
+
+### 6. 🪴 Mental Garden (Gamification)
+
+Taman virtual yang tumbuh seiring lo nyelesain tugas. Makin rajin lo gerak, makin besar pohon mental lo berevolusi!
 
 ---
 
-## 1. Konfigurasi Environment
+## 🛠️ Konfigurasi & Setup
 
-Salin file contoh `.env.example` ke `.env` (atau edit file `.env` yang ada):
+### 1. Setup Environment
+
+Salin `.env.example` ke `.env` dan sesuaikan provider lo:
 
 ```env
-# ── Pilih Provider AI ───────────────────────────────────────
-# Opsi: ollama, openai, openrouter, groq
+# Opsi: ollama, openai, openrouter, groq, gemini
 LLM_PROVIDER="ollama"
 
-# ── Konfigurasi Cloud (Jika bukan Ollama) ───────────────────
-AI_BASE_URL="https://api.openai.com/v1"
-AI_API_KEY="sk-your-key-here"
-AI_MODEL="gpt-3.5-turbo"
-
-# ── Konfigurasi Ollama ───────────────────────────────────────
-OLLAMA_BASE_URL="http://localhost:11434"
+# Jika pake Ollama
 OLLAMA_MODEL="llama3"
-OLLAMA_TIMEOUT="180"
+OLLAMA_BASE_URL="http://localhost:11434"
 
-# ── Konfigurasi Semantic Cache ───────────────────────────────
-SEMANTIC_CACHE_ENABLED="true"
-SEMANTIC_CACHE_THRESHOLD="0.95"
+# Jika pake Cloud (GPT/Gemini)
+AI_API_KEY="your-api-key"
+```
+
+### 2. Cara Menjalankan
+
+Pastikan lo punya Python 3.9+ dan Node.js terbaru.
+
+**Langkah 1: Jalankan Backend (FastAPI)**
+
+```bash
+pip install -r requirements.txt
+python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Langkah 2: Jalankan Frontend (Vite)**
+
+```bash
+npm install
+npm run dev
 ```
 
 ---
 
-## 2. Struktur Folder & Modul
+## 📂 Struktur Modular
 
-Kami menggunakan **Adapter Pattern** untuk menjaga kode tetap bersih:
+Proyek ini didesain biar gampang di-upgrade:
 
-```
-mindstep-ai/
-├── src/                # Kode React (Frontend)
-├── engines/            # Modul LLM Engine (Modular)
-│   ├── base.py         # Blueprint dasar AI engine
-│   ├── ollama_engine.py
-│   └── openai_engine.py
-├── prompts.py          # Pusat kendali instruksi "Bestie AI"
-├── engine_factory.py   # Logika pemilihan engine otomatis
-├── server.py           # Backend FastAPI & DB Logic
-├── cache.db            # Database SQLite (Otomatis)
-└── .env                # Semua setingan di sini
-```
+- `server.py`: Otak backend (FastAPI, SQLite, API Endpoints).
+- `engines/`: Folder modular buat nambahin provider AI baru.
+- `prompts.py`: Pusat kendali instruksi "Persona Bestie" AI.
+- `src/App.tsx`: UI utama yang responsif & interaktif.
 
 ---
 
-## 3. Menjalankan Aplikasi
-
-1. **Backend**: `python -m uvicorn server:app --reload`
-2. **Frontend**: `npm run dev`
-
----
-
-## Alur Request Baru
-
-```
-React Frontend
-       ↓ (POST /api/analyze)
-FastAPI Backend
-       ↓ (engine_factory)
-Pilih Provider (Ollama / GPT / OpenRouter)
-       ↓ (JSON Response)
-FastAPI Backend (Simpan ke DB & Cache)
-       ↓
-Kembali ke Frontend
-```
+<div align="center">
+  <p>Built with ❤️ by Antigravity for the Gen-Z Productivity Revolution.</p>
+  <p><i>"Small steps are still progress."</i> 🍃</p>
+</div>
