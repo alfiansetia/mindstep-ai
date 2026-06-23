@@ -3,13 +3,13 @@
   
   # 🍃 MindStep AI: Your Mental Productivity Bestie
   
-  > **Ubah stres dan overwhelming menjadi langkah kecil yang konkret.**  
-  > Asisten produktivitas mikro berbasis LLM (Local/Cloud) dengan pendekatan psikologi Gen-Z.
+  # "Ubah stres dan overwhelming menjadi langkah kecil yang konkret. Asisten produktivitas mikro berbasis LLM (Local/Cloud) dengan pendekatan psikologi Gen-Z."
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-sage.svg)](https://opensource.org/licenses/MIT)
   [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-4A5D4D.svg)](https://fastapi.tiangolo.com/)
   [![React](https://img.shields.io/badge/Frontend-React%2019-8DAA91.svg)](https://react.dev/)
   [![Tailwind](https://img.shields.io/badge/Styling-Tailwind%20v4-38B2AC.svg)](https://tailwindcss.com/)
+  [![SQLite](https://img.shields.io/badge/Database-SQLite-003B57.svg)](https://sqlite.org/)
 </div>
 
 ---
@@ -24,76 +24,73 @@ Sering dapet _Analysis Paralysis_ karena tugas numpuk? MindStep AI hadir buat na
 
 ### 1. 🧠 Hybrid AI Intelligence (Multi-Engine)
 
-Mendukung berbagai provider AI secara dinamis. Pindah dari **Ollama (Lokal & Gratis)** ke **Gemini Pro** atau **GPT-4** cuma dengan ganti satu baris di `.env`.
+Mendukung berbagai provider AI secara dinamis (Ollama, OpenAI, Gemini). Pindah engine cuma lewat `.env`.
 
-### 2. 🗄️ Database Chat Persistence (SQLite)
+### 2. 👥 Anonymous Multi-User Isolation
 
-Riwayat curhatan lo sekarang **nggak bakal ilang** walau reload browser atau pindah device. Semua tersimpan aman di database backend.
+Setiap browser/perangkat punya **User ID unik** sendiri. Riwayat curhat dan progress tanaman lo terisolasi aman dan nggak bakal kecampur sama user lain di server yang sama.
 
-### 3. 📱 Mobile-First Native Experience
+### 3. 🗄️ Database Chat Persistence (SQLite)
 
-User Interface yang dioptimalkan untuk HP dengan **Bottom Navigation Bar**, _smooth transitions_, dan layout yang jempol-friendly.
+Semua riwayat curhatan tersimpan di backend. Reload browser atau ganti hari, progress lo tetep ada.
 
-### 4. 🌙 Deep Forest Dark Mode
+### 4. 📱 Mobile-First Native Experience
 
-Mode gelap spesial dengan palet warna hijau hutan yang menenangkan, cocok buat nemenin lo curhat pas malem-malem sebelum tidur.
+UI yang jempol-friendly dengan **Bottom Navigation Bar** dan transisi halus ala aplikasi native.
 
-### 5. 🧘 Zen Focus Mode
+### 5. 🌙 Deep Forest Dark Mode & Zen Mode
 
-Fitur timer imersif yang nutupin semua gangguan di layar. Bikin lo bener-bener fokus nyelesain satu langkah kecil sampe tuntas.
+Tema gelap yang adem dan fitur timer imersif buat bantu lo fokus nyelesain tugas mikro tanpa gangguan.
 
-### 6. 🪴 Mental Garden (Gamification)
+---
 
-Taman virtual yang tumbuh seiring lo nyelesain tugas. Makin rajin lo gerak, makin besar pohon mental lo berevolusi!
+## 📊 Arsitektur Database (SQLite)
+
+Aplikasi ini menggunakan SQLite (`cache.db`) dengan skema yang dirancang untuk kecepatan dan persistensi data per-user.
+
+### 1. Tabel `sessions` (Riwayat Analisis)
+
+Menyimpan data lengkap setiap sesi curhat dan micro-steps.
+| Kolom | Tipe | Deskripsi |
+| :--- | :--- | :--- |
+| `id` | TEXT (PK) | ID unik sesi curhat. |
+| `user_id` | TEXT | ID Unik pengguna (anonymous isolation). |
+| `original_curhatan`| TEXT | Teks curhatan asli dari user. |
+| `empathy_response` | TEXT | Jawaban empati dari AI. |
+| `micro_steps` | TEXT (JSON) | Daftar langkah kecil (tasks) dalam format JSON. |
+
+### 2. Tabel `user_activity` (Mood Tracker)
+
+Digunakan untuk data statistik dan grafik pertumbuhan emosi.
+| Kolom | Tipe | Deskripsi |
+| :--- | :--- | :--- |
+| `emotion` | TEXT | Jenis emosi yang dideteksi (Frustrated, Happy, etc). |
+| `energy_level` | TEXT | Level energi yang dibutuhkan untuk tugas. |
+| `user_id` | TEXT | ID Unik pengguna. |
+| `created_at` | DATE | Tanggal aktivitas. |
+
+### 3. Tabel `plant_stats` (Gamification)
+
+Menyimpan status tanaman virtual untuk setiap user.
+| Kolom | Tipe | Deskripsi |
+| :--- | :--- | :--- |
+| `user_id` | TEXT (Unique)| Pemilik tanaman. |
+| `level` | INTEGER | Level evolusi tanaman (1-10+). |
+| `xp` | INTEGER | Experience points saat ini (0-99). |
 
 ---
 
 ## 🛠️ Konfigurasi & Setup
 
-### 1. Setup Environment
-
-Salin `.env.example` ke `.env` dan sesuaikan provider lo:
-
-```env
-# Opsi: ollama, openai, openrouter, groq, gemini
-LLM_PROVIDER="ollama"
-
-# Jika pake Ollama
-OLLAMA_MODEL="llama3"
-OLLAMA_BASE_URL="http://localhost:11434"
-
-# Jika pake Cloud (GPT/Gemini)
-AI_API_KEY="your-api-key"
-```
-
-### 2. Cara Menjalankan
-
-Pastikan lo punya Python 3.9+ dan Node.js terbaru.
-
-**Langkah 1: Jalankan Backend (FastAPI)**
-
-```bash
-pip install -r requirements.txt
-python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
-```
-
-**Langkah 2: Jalankan Frontend (Vite)**
-
-```bash
-npm install
-npm run dev
-```
-
----
-
-## 📂 Struktur Modular
-
-Proyek ini didesain biar gampang di-upgrade:
-
-- `server.py`: Otak backend (FastAPI, SQLite, API Endpoints).
-- `engines/`: Folder modular buat nambahin provider AI baru.
-- `prompts.py`: Pusat kendali instruksi "Persona Bestie" AI.
-- `src/App.tsx`: UI utama yang responsif & interaktif.
+1. **Setup Environment**: Salin `.env.example` ke `.env` dan masukkan API Key lo.
+2. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   npm install
+   ```
+3. **Jalankan Aplikasi**:
+   - **Backend**: `python -m uvicorn server:app --reload`
+   - **Frontend**: `npm run dev`
 
 ---
 
